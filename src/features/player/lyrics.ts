@@ -50,14 +50,8 @@ export function parseLrc(content: string): LyricLine[] {
 
 /** 歌词两段式获取：先按 hash 搜索候选，再下载解码为 LRC。 */
 export async function loadLyricLines(track: PlayerTrack): Promise<LyricLine[]> {
-  const searchResponse = await mobileApi.search_lyric({
-    hash: track.hash,
-    album_audio_id: track.albumAudioId ?? 0,
-  });
-
-  const candidates = toRecords(toRecord(searchResponse.body).candidates);
-  const candidate = candidates[0];
-  if (!candidate || !candidate.id || !candidate.accesskey) {
+  const candidate = await findLyricCandidate(track);
+  if (!candidate) {
     return [];
   }
 
@@ -74,6 +68,38 @@ export async function loadLyricLines(track: PlayerTrack): Promise<LyricLine[]> {
   }
 
   return parseLrc(content);
+}
+
+/**
+ * 搜索歌词候选。收藏歌曲经落库-读回后 album_audio_id 常会丢失，
+ * 仅凭 hash 可能搜不到候选，此时改用「歌手 + 歌名」关键词兜底重搜。
+ */
+async function findLyricCandidate(track: PlayerTrack): Promise<UnknownRecord | null> {
+  const first = await searchLyricCandidates({ hash: track.hash, album_audio_id: track.albumAudioId ?? 0 });
+  const direct = pickCandidate(first);
+  if (direct) {
+    return direct;
+  }
+
+  const keyword = track.artist && track.artist !== '未知歌手' ? `${track.artist} ${track.title}` : track.title;
+  if (!keyword.trim()) {
+    return null;
+  }
+
+  const fallback = await searchLyricCandidates({ hash: track.hash, album_audio_id: track.albumAudioId ?? 0, keywords: keyword });
+  return pickCandidate(fallback);
+}
+
+function searchLyricCandidates(params: { hash: string; album_audio_id: string | number; keywords?: string }) {
+  return mobileApi.search_lyric(params).then((response) => toRecords(toRecord(response.body).candidates));
+}
+
+function pickCandidate(candidates: UnknownRecord[]): UnknownRecord | null {
+  const candidate = candidates[0];
+  if (!candidate || !candidate.id || !candidate.accesskey) {
+    return null;
+  }
+  return candidate;
 }
 
 export function findActiveLyricIndex(lines: LyricLine[], positionMs: number): number {
