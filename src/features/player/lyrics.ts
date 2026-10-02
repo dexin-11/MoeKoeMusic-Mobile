@@ -71,26 +71,33 @@ export async function loadLyricLines(track: PlayerTrack): Promise<LyricLine[]> {
 }
 
 /**
- * 搜索歌词候选。收藏歌曲经落库-读回后 album_audio_id 常会丢失，
- * 仅凭 hash 可能搜不到候选，此时改用「歌手 + 歌名」关键词兜底重搜。
+ * 搜索歌词候选，逐级兜底：
+ * 1. hash + album_audio_id（快且精准，但酷狗会校验两者一致性，收藏歌曲读回的 id 可能对不上）；
+ * 2. 仅 hash（hash 本身可唯一定位歌词）；
+ * 3. 「歌手 + 歌名」关键词。
  */
 async function findLyricCandidate(track: PlayerTrack): Promise<UnknownRecord | null> {
-  const first = await searchLyricCandidates({ hash: track.hash, album_audio_id: track.albumAudioId ?? 0 });
-  const direct = pickCandidate(first);
-  if (direct) {
-    return direct;
+  const attempts: { hash: string; album_audio_id?: string | number; keywords?: string }[] = [];
+  if (track.albumAudioId) {
+    attempts.push({ hash: track.hash, album_audio_id: track.albumAudioId });
   }
+  attempts.push({ hash: track.hash });
 
   const keyword = track.artist && track.artist !== '未知歌手' ? `${track.artist} ${track.title}` : track.title;
-  if (!keyword.trim()) {
-    return null;
+  if (keyword.trim()) {
+    attempts.push({ hash: track.hash, keywords: keyword });
   }
 
-  const fallback = await searchLyricCandidates({ hash: track.hash, album_audio_id: track.albumAudioId ?? 0, keywords: keyword });
-  return pickCandidate(fallback);
+  for (const params of attempts) {
+    const candidate = pickCandidate(await searchLyricCandidates(params));
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
-function searchLyricCandidates(params: { hash: string; album_audio_id: string | number; keywords?: string }) {
+function searchLyricCandidates(params: { hash: string; album_audio_id?: string | number; keywords?: string }) {
   return mobileApi.search_lyric(params).then((response) => toRecords(toRecord(response.body).candidates));
 }
 
