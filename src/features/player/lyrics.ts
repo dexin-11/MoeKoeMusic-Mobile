@@ -1,3 +1,5 @@
+import { pickStringLike, pickText } from '@/lib/api-parse';
+import { stripEmTags } from '@/lib/format';
 import { mobileApi } from '@/lib/kugou-api';
 
 import type { LyricLine, PlayerTrack } from './types';
@@ -70,34 +72,87 @@ export async function loadLyricLines(track: PlayerTrack): Promise<LyricLine[]> {
   return parseLrc(content);
 }
 
+type LyricSearchArgs = {
+  hash: string;
+  album_audio_id?: string | number;
+  keywords?: string;
+  duration?: number;
+};
+
 /**
  * 搜索歌词候选，逐级兜底：
  * 1. hash + album_audio_id（快且精准，但酷狗会校验两者一致性，收藏歌曲读回的 id 可能对不上）；
  * 2. 仅 hash（hash 本身可唯一定位歌词）；
- * 3. 「歌手 + 歌名」关键词。
+ * 3. 歌词库认不出当前 hash 时（收藏读回的 hash 可能不是标准音源），用歌名搜索换标准 FileHash 再搜；
+ * 4. 「歌手 + 歌名」关键词。
  */
 async function findLyricCandidate(track: PlayerTrack): Promise<UnknownRecord | null> {
-  const attempts: { hash: string; album_audio_id?: string | number; keywords?: string }[] = [];
   if (track.albumAudioId) {
-    attempts.push({ hash: track.hash, album_audio_id: track.albumAudioId });
-  }
-  attempts.push({ hash: track.hash });
-
-  const keyword = track.artist && track.artist !== '未知歌手' ? `${track.artist} ${track.title}` : track.title;
-  if (keyword.trim()) {
-    attempts.push({ hash: track.hash, keywords: keyword });
-  }
-
-  for (const params of attempts) {
-    const candidate = pickCandidate(await searchLyricCandidates(params));
+    const candidate = pickCandidate(await searchLyricCandidates({ hash: track.hash, album_audio_id: track.albumAudioId }));
     if (candidate) {
       return candidate;
     }
   }
+
+  const hashOnly = pickCandidate(await searchLyricCandidates({ hash: track.hash }));
+  if (hashOnly) {
+    return hashOnly;
+  }
+
+  for (const replacement of await findLyricHashViaSearch(track)) {
+    const candidate = pickCandidate(await searchLyricCandidates(replacement));
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  const keyword = track.artist && track.artist !== '未知歌手' ? `${track.artist} ${track.title}` : track.title;
+  if (keyword.trim()) {
+    const candidate = pickCandidate(
+      await searchLyricCandidates({
+        hash: track.hash,
+        keywords: keyword,
+        duration: track.durationMs ? Math.round(track.durationMs / 1000) * 1000 : 0,
+      })
+    );
+    if (candidate) {
+      return candidate;
+    }
+  }
+
   return null;
 }
 
-function searchLyricCandidates(params: { hash: string; album_audio_id?: string | number; keywords?: string }) {
+/** 按歌名搜索歌曲，返回标准音源 hash 供歌词搜索兜底。 */
+async function findLyricHashViaSearch(track: PlayerTrack): Promise<LyricSearchArgs[]> {
+  const keyword = track.artist && track.artist !== '未知歌手' ? `${track.artist} ${track.title}` : track.title;
+  if (!keyword.trim()) {
+    return [];
+  }
+
+  try {
+    const response = await mobileApi.search({ keywords: keyword, page: 1, pagesize: 10, type: 'song' });
+    const records = toRecords(toRecord(toRecord(response.body).data).lists);
+    const title = normalizeTitle(track.title);
+    return records
+      .map((item) => ({
+        hash: pickText(item.FileHash),
+        title: pickText(item.OriSongName, item.SongName, item.FileName),
+        albumAudioId: pickStringLike(item.MixSongID),
+      }))
+      .filter((item) => item.hash && normalizeTitle(item.title) === title)
+      .slice(0, 3)
+      .map((item) => ({ hash: item.hash, album_audio_id: item.albumAudioId || 0 }));
+  } catch {
+    return [];
+  }
+}
+
+function normalizeTitle(value: string): string {
+  return stripEmTags(value).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function searchLyricCandidates(params: LyricSearchArgs) {
   return mobileApi.search_lyric(params).then((response) => toRecords(toRecord(response.body).candidates));
 }
 
