@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -11,14 +12,6 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import Animated, {
-  Easing,
-  cancelAnimation,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Slider, Spinner, Text, View, XStack, YStack } from 'tamagui';
 
@@ -31,7 +24,7 @@ import { libraryActions, useIsLiked } from '@/features/library/store';
 import { playerActions, usePlayer, usePlayerProgress } from '@/features/player/store';
 import type { PlayMode } from '@/features/player/types';
 import { useIsDark, usePalette } from '@/hooks/use-palette';
-import { formatClock } from '@/lib/format';
+import { formatClock, sizedImage } from '@/lib/format';
 import { shareTrack } from '@/lib/share';
 
 const MODE_ICON: Record<PlayMode, 'repeat' | 'repeat-once' | 'shuffle-variant'> = {
@@ -40,43 +33,25 @@ const MODE_ICON: Record<PlayMode, 'repeat' | 'repeat-once' | 'shuffle-variant'> 
   single: 'repeat-once',
 };
 
-function SpinningDisc({ coverUrl, playing, size }: { coverUrl: string | null; playing: boolean; size: number }) {
+/** 封面大圆角卡片：暂停时轻微降不透明度，替代旧旋转黑胶。 */
+function ArtworkCard({ coverUrl, playing, size }: { coverUrl: string | null; playing: boolean; size: number }) {
   const isDark = useIsDark();
-  const rotation = useSharedValue(0);
-
-  useEffect(() => {
-    if (playing) {
-      rotation.value = withRepeat(
-        withTiming(rotation.value + 360, { duration: 24000, easing: Easing.linear }),
-        -1,
-        false
-      );
-    } else {
-      cancelAnimation(rotation);
-    }
-  }, [playing, rotation]);
-
-  const spinStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value % 360}deg` }],
-  }));
 
   return (
-    <YStack
+    <View
       width={size}
       height={size}
-      borderRadius={size / 2}
-      alignItems="center"
-      justifyContent="center"
-      backgroundColor={isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.75)'}
+      borderRadius={26}
+      overflow="hidden"
+      opacity={playing ? 1 : 0.82}
+      transition="quick"
       shadowColor="#000000"
-      shadowOffset={{ width: 0, height: 18 }}
-      shadowOpacity={isDark ? 0.5 : 0.18}
-      shadowRadius={30}
-      elevation={16}>
-      <Animated.View style={spinStyle}>
-        <Artwork uri={coverUrl} size={size - 26} circle />
-      </Animated.View>
-    </YStack>
+      shadowOffset={{ width: 0, height: 20 }}
+      shadowOpacity={isDark ? 0.55 : 0.22}
+      shadowRadius={36}
+      style={{ elevation: 18 }}>
+      <Artwork uri={coverUrl} size={size} radius={26} />
+    </View>
   );
 }
 
@@ -143,6 +118,7 @@ function PlaybackProgress() {
 
 export default function PlayerScreen() {
   const palette = usePalette();
+  const isDark = useIsDark();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -199,7 +175,7 @@ export default function PlayerScreen() {
   }
 
   const compact = height < 700;
-  const discSize = Math.min(width - 104, compact ? 236 : 300);
+  const artworkSize = Math.min(width - 72, compact ? 250 : 320);
   const busy = loading || buffering;
 
   function handlePagerScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
@@ -244,9 +220,25 @@ export default function PlayerScreen() {
 
   return (
     <View flex={1} backgroundColor={palette.playerBottom}>
+      {/* Apple Music 式背景：封面大图高斯模糊 + 顶部浅色到主题底的渐变遮罩 */}
+      {track.coverUrl ? (
+        <Image
+          source={{ uri: sizedImage(track.coverUrl, 480) ?? track.coverUrl }}
+          style={StyleSheet.absoluteFill}
+          blurRadius={50}
+          contentFit="cover"
+          transition={400}
+        />
+      ) : null}
       <LinearGradient
-        colors={[palette.playerTop, palette.playerBottom]}
+        colors={[isDark ? 'rgba(14, 15, 22, 0.82)' : 'rgba(255, 255, 255, 0.86)', palette.playerBottom + 'F2']}
+        locations={[0, 0.55]}
         style={StyleSheet.absoluteFill}
+      />
+      <LinearGradient
+        colors={['transparent', palette.playerBottom]}
+        locations={[0, 1]}
+        style={[StyleSheet.absoluteFill, { height: '100%' }]}
       />
 
       <YStack flex={1} paddingTop={insets.top + 6} paddingBottom={Math.max(insets.bottom, 14) + 20}>
@@ -292,19 +284,19 @@ export default function PlayerScreen() {
           showsHorizontalScrollIndicator={false}
           onMomentumScrollEnd={handlePagerScroll}
           style={{ flex: 1 }}>
-          <YStack width={width} alignItems="center" justifyContent="center" gap={compact ? 20 : 30}>
-            <SpinningDisc coverUrl={track.coverUrl} playing={playing} size={discSize} />
+          <YStack width={width} alignItems="center" justifyContent="center" gap={compact ? 22 : 34}>
+            <ArtworkCard coverUrl={track.coverUrl} playing={playing} size={artworkSize} />
 
             <YStack alignItems="center" gap={7} paddingHorizontal={40} maxWidth={560}>
               <Text
                 color={palette.text}
-                fontSize={compact ? 19 : 22}
+                fontSize={compact ? 20 : 23}
                 fontWeight="800"
                 textAlign="center"
                 numberOfLines={1}>
                 {track.title}
               </Text>
-              <Text color={palette.textSecondary} fontSize={14} numberOfLines={1}>
+              <Text color={palette.textSecondary} fontSize={15} numberOfLines={1}>
                 {track.artist || '未知歌手'}
               </Text>
               {error ? (
@@ -382,10 +374,10 @@ export default function PlayerScreen() {
 
           <PlaybackProgress />
 
-          <XStack alignItems="center" justifyContent="space-between">
+          <XStack alignItems="center" justifyContent="space-between" paddingHorizontal={8}>
             <XStack
-              width={42}
-              height={42}
+              width={44}
+              height={44}
               alignItems="center"
               justifyContent="center"
               transition="quickest"
@@ -395,64 +387,56 @@ export default function PlayerScreen() {
             </XStack>
 
             <XStack
-              width={52}
-              height={52}
+              width={56}
+              height={56}
               alignItems="center"
               justifyContent="center"
               transition="quickest"
               pressStyle={{ opacity: 0.55, scale: 0.88 }}
               onPress={() => playerActions.previous()}>
-              <Ionicons name="play-skip-back" size={28} color={palette.text} />
+              <Ionicons name="play-skip-back" size={32} color={palette.text} />
             </XStack>
 
             <XStack
-              width={74}
-              height={74}
-              borderRadius={37}
-              overflow="hidden"
+              width={72}
+              height={72}
               alignItems="center"
               justifyContent="center"
               transition="quickest"
-              pressStyle={{ scale: 0.94, opacity: 0.9 }}
+              pressStyle={{ scale: 0.9, opacity: 0.75 }}
               onPress={() => playerActions.toggle()}>
-              <LinearGradient
-                colors={[palette.gradientStart, palette.gradientEnd]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
               {busy ? (
-                <Spinner size="small" color="#FFFFFF" />
+                <Spinner size="large" color={palette.text} />
               ) : (
                 <Ionicons
                   name={playing ? 'pause' : 'play'}
-                  size={30}
-                  color="#FFFFFF"
-                  style={playing ? undefined : { marginLeft: 3 }}
+                  size={40}
+                  color={palette.text}
+                  style={playing ? undefined : { marginLeft: 4 }}
                 />
               )}
             </XStack>
 
             <XStack
-              width={52}
-              height={52}
+              width={56}
+              height={56}
               alignItems="center"
               justifyContent="center"
               transition="quickest"
               pressStyle={{ opacity: 0.55, scale: 0.88 }}
               onPress={() => playerActions.next()}>
-              <Ionicons name="play-skip-forward" size={28} color={palette.text} />
+              <Ionicons name="play-skip-forward" size={32} color={palette.text} />
             </XStack>
 
             <XStack
-              width={42}
-              height={42}
+              width={44}
+              height={44}
               alignItems="center"
               justifyContent="center"
               transition="quickest"
               pressStyle={{ opacity: 0.55, scale: 0.9 }}
               onPress={() => setQueueOpen(true)}>
-              <MaterialCommunityIcons name="playlist-music" size={24} color={palette.textSecondary} />
+              <MaterialCommunityIcons name="playlist-music" size={22} color={palette.textSecondary} />
             </XStack>
           </XStack>
         </YStack>

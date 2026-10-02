@@ -30,6 +30,10 @@ export type PlayerState = {
 export type ProgressState = {
   positionMs: number;
   durationMs: number;
+  /** 是否在播放中；歌词逐字动画用它判断是否在 tick 之间外推位置。 */
+  playing: boolean;
+  /** 最近一次 positionMs 更新的本地时间戳；逐字动画用它做帧间线性插值。 */
+  positionUpdatedAt: number;
 };
 
 const INITIAL_PLAYER_STATE: PlayerState = {
@@ -48,6 +52,8 @@ const INITIAL_PLAYER_STATE: PlayerState = {
 const INITIAL_PROGRESS_STATE: ProgressState = {
   positionMs: 0,
   durationMs: 0,
+  playing: false,
+  positionUpdatedAt: 0,
 };
 
 function createStore<T extends object>(initial: T) {
@@ -115,7 +121,7 @@ function ensureAudioPlayer(): AudioPlayer {
     return audioPlayer;
   }
 
-  audioPlayer = createAudioPlayer(null, { updateInterval: 500 });
+  audioPlayer = createAudioPlayer(null, { updateInterval: 100 });
   audioPlayer.addListener('playbackStatusUpdate', handlePlaybackStatus);
   void setAudioModeAsync({
     playsInSilentMode: true,
@@ -128,13 +134,15 @@ function ensureAudioPlayer(): AudioPlayer {
 
 function handlePlaybackStatus(status: AudioStatus) {
   const current = progressStore.getState();
+  const playing = status.playing;
   progressStore.setState({
     positionMs: Math.max(0, Math.round(status.currentTime * 1000)),
     durationMs: status.duration > 0 ? Math.round(status.duration * 1000) : current.durationMs,
+    playing,
+    positionUpdatedAt: Date.now(),
   });
 
   const state = playerStore.getState();
-  const playing = status.playing;
   const buffering = status.isBuffering && !status.playing;
   if (state.playing !== playing || state.buffering !== buffering) {
     playerStore.setState({ playing, buffering });
@@ -196,7 +204,7 @@ async function loadTrackAt(index: number, options?: { autoplay?: boolean }) {
     lyrics: [],
     lyricsStatus: 'idle',
   });
-  progressStore.setState({ positionMs: 0, durationMs: track.durationMs ?? 0 });
+  progressStore.setState({ positionMs: 0, durationMs: track.durationMs ?? 0, positionUpdatedAt: Date.now() });
 
   try {
     const source = await resolveSongSource(track);
@@ -400,7 +408,7 @@ export const playerActions = {
 
     const { durationMs } = progressStore.getState();
     const clamped = Math.max(0, durationMs > 0 ? Math.min(positionMs, durationMs) : positionMs);
-    progressStore.setState({ positionMs: clamped });
+    progressStore.setState({ positionMs: clamped, positionUpdatedAt: Date.now() });
     void audioPlayer.seekTo(clamped / 1000);
   },
 
