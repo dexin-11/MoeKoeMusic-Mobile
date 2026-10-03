@@ -68,7 +68,7 @@ const LYRIC_FONT_OPTIONS: { value: LyricFontSize; label: string }[] = [
   { value: 26, label: '大' },
 ];
 
-/** 封面大圆角卡片：暂停时轻微降不透明度，替代旧旋转黑胶。 */
+/** 封面大圆角卡片：暂停时轻微缩小，不降透明度（透明度会让背景色透进来显得发灰）。 */
 function ArtworkCard({ coverUrl, playing, size }: { coverUrl: string | null; playing: boolean; size: number }) {
   const isDark = useIsDark();
 
@@ -78,7 +78,7 @@ function ArtworkCard({ coverUrl, playing, size }: { coverUrl: string | null; pla
       height={size}
       borderRadius={26}
       overflow="hidden"
-      opacity={playing ? 1 : 0.82}
+      transform={[{ scale: playing ? 1 : 0.965 }]}
       transition="quick"
       shadowColor="#000000"
       shadowOffset={{ width: 0, height: 20 }}
@@ -92,10 +92,15 @@ function ArtworkCard({ coverUrl, playing, size }: { coverUrl: string | null; pla
 
 function PlaybackProgress() {
   const palette = usePalette();
+  const isDark = useIsDark();
   const { positionMs, durationMs } = usePlayerProgress();
   const [dragValue, setDragValue] = useState<number | null>(null);
   const dragValueRef = useRef<number | null>(null);
   const shownPosition = dragValue ?? positionMs;
+  // 进度条用跟随深浅色的中性色，不用主题色：封面主色背景什么颜色都可能有，
+  // 主题色（如苹果红）撞上绿/蓝封面会很突兀
+  const fill = palette.text;
+  const track = isDark ? 'rgba(255, 255, 255, 0.28)' : 'rgba(0, 0, 0, 0.16)';
 
   return (
     <YStack gap={7}>
@@ -117,22 +122,22 @@ function PlaybackProgress() {
           dragValueRef.current = null;
           setTimeout(() => setDragValue(null), 180);
         }}>
-        <Slider.Track backgroundColor={palette.cardAlt} height={4} borderRadius={999}>
-          <Slider.TrackActive backgroundColor={palette.accent} />
+        <Slider.Track backgroundColor={track} height={4} borderRadius={999}>
+          <Slider.TrackActive backgroundColor={fill} />
         </Slider.Track>
         <Slider.Thumb
           index={0}
           size={16}
           circular
-          backgroundColor={palette.accent}
+          backgroundColor={fill}
           borderWidth={2.5}
           borderColor="#FFFFFF"
           pressStyle={{
             scale: 1.2,
-            backgroundColor: palette.accentPressed,
+            backgroundColor: fill,
             borderColor: '#FFFFFF',
           }}
-          hoverStyle={{ backgroundColor: palette.accent, borderColor: '#FFFFFF' }}
+          hoverStyle={{ backgroundColor: fill, borderColor: '#FFFFFF' }}
           shadowColor="#000000"
           shadowOpacity={0.2}
           shadowRadius={5}
