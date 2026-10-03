@@ -6,18 +6,25 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo } from 'react';
 import { TamaguiProvider } from 'tamagui';
 
-import { hydrateSettings, useSettingsHydrated } from '@/features/settings/store';
+import { hydrateSettings, useSettings, useSettingsHydrated } from '@/features/settings/store';
 import { ToastHost } from '@/components/ui/toast';
+import { setAppAnimationsEnabled } from '@/constants/motion';
 import { useEffectiveScheme, usePalette } from '@/hooks/use-palette';
 import { tamaguiConfig } from '../../tamagui.config';
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 void hydrateSettings();
+setAppAnimationsEnabled(true);
 
 export default function RootLayout() {
   const hydrated = useSettingsHydrated();
   const palette = usePalette();
   const isDark = useEffectiveScheme() === 'dark';
+  const animationsEnabled = useSettings().animationsEnabled;
+
+  useEffect(() => {
+    setAppAnimationsEnabled(animationsEnabled);
+  }, [animationsEnabled]);
 
   const navTheme = useMemo(() => {
     const base = isDark ? DarkTheme : DefaultTheme;

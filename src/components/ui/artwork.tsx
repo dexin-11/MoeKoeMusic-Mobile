@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, View } from 'react-native';
 
+import { useAnimationsEnabled } from '@/features/settings/store';
 import { usePalette } from '@/hooks/use-palette';
 
 type ArtworkProps = {
@@ -15,6 +16,7 @@ type ArtworkProps = {
 
 export function Artwork({ uri, size, radius = 14, circle = false }: ArtworkProps) {
   const palette = usePalette();
+  const animationsEnabled = useAnimationsEnabled();
   const frameStyle = size
     ? { width: size, height: size, borderRadius: circle ? size / 2 : radius }
     : { width: '100%' as const, aspectRatio: 1, borderRadius: radius };
@@ -34,7 +36,12 @@ export function Artwork({ uri, size, radius = 14, circle = false }: ArtworkProps
 
   return (
     <View style={[styles.frame, frameStyle, { backgroundColor: palette.cardAlt }]}>
-      <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} />
+      <Image
+        source={{ uri }}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        transition={animationsEnabled ? 200 : 0}
+      />
     </View>
   );
 }
