@@ -100,9 +100,8 @@ export function MiniPlayer() {
       borderRadius={22}
       borderWidth={GLASS_AVAILABLE ? 0 : StyleSheet.hairlineWidth}
       borderColor={palette.border}
-      // 比共用 token barSurface(0.92) 更透：Android 无玻璃效果，靠半透明底
-      // 透出滚动内容营造磨砂感；不够透会显得是一块死板的实心卡片
-      backgroundColor={GLASS_AVAILABLE ? 'transparent' : isDark ? 'rgba(18, 18, 22, 0.76)' : 'rgba(250, 250, 252, 0.78)'}
+      // Android 无玻璃效果：底色几乎不透明，避免滚动内容透过卡片干扰文字
+      backgroundColor={GLASS_AVAILABLE ? 'transparent' : isDark ? '#121216' : '#FAFAFC'}
       shadowColor={palette.dockShadow}
       shadowOffset={{ width: 0, height: isDark ? 3 : 8 }}
       shadowOpacity={isDark ? 0.18 : 0.1}
