@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Sheet, Text, XStack, YStack } from 'tamagui';
+import { Sheet, Switch, Text, XStack, YStack } from 'tamagui';
 
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import {
   settingsActions,
   useLyricAlign,
   useLyricFontSize,
+  useShowLyricTranslation,
   type LyricAlign,
   type LyricFontSize,
 } from '@/features/settings/store';
@@ -118,6 +119,7 @@ export function LyricSettingsSheet({
   const insets = useSafeAreaInsets();
   const lyricAlign = useLyricAlign();
   const lyricFontSize = useLyricFontSize();
+  const showLyricTranslation = useShowLyricTranslation();
 
   return (
     <Sheet
@@ -164,6 +166,24 @@ export function LyricSettingsSheet({
             onChange={(next) => settingsActions.setLyricFontSize(Number(next) as LyricFontSize)}
           />
         </YStack>
+        <XStack alignItems="center" gap={12}>
+          <YStack flex={1} gap={2}>
+            <Text color={palette.text} fontSize={14.5} fontWeight="600">
+              显示翻译
+            </Text>
+            <Text color={palette.textTertiary} fontSize={11.5} lineHeight={16}>
+              外国歌曲在歌词下方显示中文翻译
+            </Text>
+          </YStack>
+          <Switch
+            size="$2"
+            checked={showLyricTranslation}
+            onCheckedChange={(checked) => settingsActions.setShowLyricTranslation(checked)}
+            backgroundColor={showLyricTranslation ? palette.accent : palette.cardAlt}
+            borderWidth={0}>
+            <Switch.Thumb backgroundColor="#FFFFFF" />
+          </Switch>
+        </XStack>
       </Sheet.Frame>
     </Sheet>
   );

@@ -160,7 +160,7 @@ export default function SettingsScreen() {
   const scheme = useEffectiveScheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { themeMode, accentId, lyricAlign, lyricFontSize, quality, animationsEnabled } =
+  const { themeMode, accentId, lyricAlign, lyricFontSize, quality, animationsEnabled, showLyricTranslation } =
     useSettings();
   const [loggedIn, setLoggedIn] = useState(() => isLoggedIn());
   const [aboutVisible, setAboutVisible] = useState(false);
@@ -323,6 +323,25 @@ export default function SettingsScreen() {
                   onChange={(next) => settingsActions.setLyricFontSize(Number(next) as LyricFontSize)}
                 />
               </YStack>
+              <View height={StyleSheet.hairlineWidth} backgroundColor={palette.border} />
+              <XStack alignItems="center" gap={12}>
+                <YStack flex={1} gap={2}>
+                  <Text color={palette.text} fontSize={14.5} fontWeight="600">
+                    歌词翻译
+                  </Text>
+                  <Text color={palette.textTertiary} fontSize={11.5} lineHeight={16}>
+                    外国歌曲在歌词下方显示中文翻译
+                  </Text>
+                </YStack>
+                <Switch
+                  size="$2"
+                  checked={showLyricTranslation}
+                  onCheckedChange={(checked) => settingsActions.setShowLyricTranslation(checked)}
+                  backgroundColor={showLyricTranslation ? palette.accent : palette.cardAlt}
+                  borderWidth={0}>
+                  <Switch.Thumb backgroundColor="#FFFFFF" />
+                </Switch>
+              </XStack>
             </YStack>
           </YStack>
 
