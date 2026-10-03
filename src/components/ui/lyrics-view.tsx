@@ -191,29 +191,17 @@ function KaraokeLine({
     const duration = Math.max(16, Math.min((nextBoundary ?? extrapolated + 300) - extrapolated, 400));
 
     cancelAnimation(fill);
-    fill.value = withTiming(sungFractionAt(extrapolated), { duration });
+    fill.set(withTiming(sungFractionAt(extrapolated), { duration }));
 
     return () => cancelAnimation(fill);
     // durationMs 只在切歌时变化，无需进入依赖。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [positionMs, positionUpdatedAt, playing, lineWidth, sungFractionAt, fill]);
 
+  // 遮罩是无子元素的绝对矩形（技能豁免情形）：动画 width 不触发任何文字重排。
   const fillStyle = useAnimatedStyle(() => ({
-    width: fill.value * lineWidth,
+    width: fill.get() * lineWidth,
   }));
-
-  const lineText = (
-    <Text
-      onPress={onSeekLine ? () => onSeekLine(line) : undefined}
-      suppressHighlighting
-      textAlign={align === 'center' ? 'center' : 'left'}
-      fontSize={fontSize}
-      lineHeight={Math.round(fontSize * 1.36)}
-      fontWeight="700"
-      style={styles.lineText}>
-      {line.text}
-    </Text>
-  );
 
   return (
     <View
@@ -232,16 +220,12 @@ function KaraokeLine({
         style={styles.lineText}>
         {line.text}
       </Text>
-      {/* 上层：已唱部分，按填充宽度裁切 */}
+      {/* 上层：已唱部分，矩形遮罩从左向右揭示 */}
       {lineWidth ? (
         <MaskedView
           style={StyleSheet.absoluteFill}
           androidRenderingMode="hardware"
-          maskElement={
-            <Animated.View style={fillStyle}>
-              <View style={{ width: lineWidth }}>{lineText}</View>
-            </Animated.View>
-          }>
+          maskElement={<Animated.View style={[styles.maskFill, fillStyle]} />}>
           <Text
             color={activeColor}
             fontSize={fontSize}
@@ -401,5 +385,12 @@ const styles = StyleSheet.create({
   translationText: {
     includeFontPadding: false,
     marginTop: 5,
+  },
+  maskFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#000',
   },
 });

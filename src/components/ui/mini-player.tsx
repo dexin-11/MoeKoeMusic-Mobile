@@ -19,6 +19,7 @@ import { Artwork } from '@/components/ui/artwork';
 import { playerActions, usePlayer, usePlayerProgress } from '@/features/player/store';
 import { useAnimationsEnabled } from '@/features/settings/store';
 import { useIsDark, usePalette } from '@/hooks/use-palette';
+import { lightImpactHaptic } from '@/lib/haptics';
 
 export const MINI_PLAYER_HEIGHT = 58;
 
@@ -62,10 +63,8 @@ export function MiniPlayer() {
 
   useEffect(() => {
     if (playing && animationsEnabled) {
-      rotation.value = withRepeat(
-        withTiming(rotation.value + 360, { duration: 16000, easing: Easing.linear }),
-        -1,
-        false
+      rotation.set(
+        withRepeat(withTiming(rotation.get() + 360, { duration: 16000, easing: Easing.linear }), -1, false)
       );
     } else {
       cancelAnimation(rotation);
@@ -73,7 +72,7 @@ export function MiniPlayer() {
   }, [playing, animationsEnabled, rotation]);
 
   const spinStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value % 360}deg` }],
+    transform: [{ rotate: `${rotation.get() % 360}deg` }],
   }));
 
   if (!track) {
@@ -134,6 +133,7 @@ export function MiniPlayer() {
           pressStyle={{ scale: 0.9, opacity: 0.7 }}
           onPress={(event) => {
             event.stopPropagation();
+            lightImpactHaptic();
             playerActions.toggle();
           }}>
           {busy ? (
