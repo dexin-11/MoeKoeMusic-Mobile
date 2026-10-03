@@ -7,6 +7,7 @@ export type StoredAppearance = {
   accentId?: unknown;
   lyricAlign?: unknown;
   lyricFontSize?: unknown;
+  lyricTranslationFontSize?: unknown;
   quality?: unknown;
   animationsEnabled?: unknown;
   showLyricTranslation?: unknown;
@@ -28,6 +29,7 @@ export async function writeStoredAppearance(value: {
   accentId: string;
   lyricAlign: string;
   lyricFontSize: number;
+  lyricTranslationFontSize: number;
   quality: string;
   animationsEnabled: boolean;
   showLyricTranslation: boolean;

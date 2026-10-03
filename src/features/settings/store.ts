@@ -15,8 +15,15 @@ export type QualityId = '128' | '320' | 'flac';
 /** 歌词字号档位（px）。 */
 export type LyricFontSize = 18 | 22 | 26;
 
+/** 歌词翻译字号档位（px）。 */
+export type LyricTranslationFontSize = 13 | 15 | 18;
+
 export function isLyricFontSize(value: unknown): value is LyricFontSize {
   return value === 18 || value === 22 || value === 26;
+}
+
+export function isLyricTranslationFontSize(value: unknown): value is LyricTranslationFontSize {
+  return value === 13 || value === 15 || value === 18;
 }
 
 export type SettingsState = {
@@ -30,6 +37,8 @@ export type SettingsState = {
   animationsEnabled: boolean;
   /** 外国歌曲的歌词翻译行是否显示。 */
   showLyricTranslation: boolean;
+  /** 歌词翻译字号档位（px）。 */
+  lyricTranslationFontSize: LyricTranslationFontSize;
 };
 
 const INITIAL_SETTINGS_STATE: SettingsState = {
@@ -41,6 +50,7 @@ const INITIAL_SETTINGS_STATE: SettingsState = {
   quality: '128',
   animationsEnabled: true,
   showLyricTranslation: true,
+  lyricTranslationFontSize: 15,
 };
 
 function createStore<T extends object>(initial: T) {
@@ -112,6 +122,10 @@ export function hydrateSettings(): Promise<void> {
           stored && typeof stored.showLyricTranslation === 'boolean'
             ? stored.showLyricTranslation
             : true,
+        lyricTranslationFontSize:
+          stored && isLyricTranslationFontSize(stored.lyricTranslationFontSize)
+            ? stored.lyricTranslationFontSize
+            : 15,
         hydrated: true,
       });
       })().catch(() => {
@@ -125,13 +139,22 @@ export function hydrateSettings(): Promise<void> {
 }
 
 function persist() {
-  const { themeMode, accentId, lyricAlign, lyricFontSize, quality, animationsEnabled, showLyricTranslation } =
-    settingsStore.getState();
+  const {
+    themeMode,
+    accentId,
+    lyricAlign,
+    lyricFontSize,
+    lyricTranslationFontSize,
+    quality,
+    animationsEnabled,
+    showLyricTranslation,
+  } = settingsStore.getState();
   void writeStoredAppearance({
     themeMode,
     accentId,
     lyricAlign,
     lyricFontSize,
+    lyricTranslationFontSize,
     quality,
     animationsEnabled,
     showLyricTranslation,
@@ -153,6 +176,10 @@ export const settingsActions = {
   },
   setLyricFontSize(lyricFontSize: LyricFontSize) {
     settingsStore.setState({ lyricFontSize });
+    persist();
+  },
+  setLyricTranslationFontSize(lyricTranslationFontSize: LyricTranslationFontSize) {
+    settingsStore.setState({ lyricTranslationFontSize });
     persist();
   },
   setQuality(quality: QualityId) {
@@ -245,5 +272,13 @@ export function useShowLyricTranslation(): boolean {
     settingsStore.subscribe,
     () => settingsStore.getState().showLyricTranslation,
     () => INITIAL_SETTINGS_STATE.showLyricTranslation
+  );
+}
+
+export function useLyricTranslationFontSize(): LyricTranslationFontSize {
+  return useSyncExternalStore(
+    settingsStore.subscribe,
+    () => settingsStore.getState().lyricTranslationFontSize,
+    () => INITIAL_SETTINGS_STATE.lyricTranslationFontSize
   );
 }
