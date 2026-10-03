@@ -100,6 +100,8 @@ let loadSequence = 0;
 let failStreak = 0;
 /** 当前 player 里装载的音源地址；切音质时用它判断是否真的换了源。 */
 let currentSourceUri: string | null = null;
+/** 当前音源码率（bps）；非会员各档位可能都返回试听码率，用于跳过无效换源。 */
+let currentBitrate: number | null = null;
 let advanceTimer: ReturnType<typeof setTimeout> | null = null;
 // 每次“建立新队列”都会自增；后台补齐歌单剩余曲目时靠它判断队列是否已被替换。
 let queueGeneration = 0;
@@ -219,6 +221,7 @@ async function loadTrackAt(index: number, options?: { autoplay?: boolean }) {
     const player = ensureAudioPlayer();
     player.replace({ uri: source.uri });
     currentSourceUri = source.uri;
+    currentBitrate = source.bitrate ?? null;
     // 每次换曲重新激活即可同步刷新锁屏元数据;Android 侧同时启动前台服务,
     // 保证息屏后台连续播放不受系统 3 分钟限制。
     player.setActiveForLockScreen(true, lockScreenMetadataFor(track), LOCK_SCREEN_OPTIONS);
@@ -419,7 +422,12 @@ export const playerActions = {
 
     try {
       const source = await resolveSongSource(state.track, quality);
-      if (!source.uri || source.uri === currentSourceUri) {
+      if (
+        !source.uri ||
+        source.uri === currentSourceUri ||
+        // 酷狗对非会员各档位都返回同一试听码率：内容没变就不要打断播放。
+        (source.bitrate != null && currentBitrate != null && source.bitrate === currentBitrate)
+      ) {
         return;
       }
 
@@ -431,6 +439,7 @@ export const playerActions = {
       playerStore.setState({ loading: true, error: '' });
       player.replace({ uri: source.uri });
       currentSourceUri = source.uri;
+      currentBitrate = source.bitrate ?? currentBitrate;
       // 换源后给原生层一点加载时间再跳进度，避免 seek 落空回到 0。
       await new Promise((resolve) => setTimeout(resolve, 250));
       await player.seekTo(positionMs / 1000);
@@ -515,6 +524,7 @@ export const playerActions = {
     }
 
     currentSourceUri = null;
+    currentBitrate = null;
     audioPlayer?.pause();
     audioPlayer?.clearLockScreenControls();
     playerStore.setState({

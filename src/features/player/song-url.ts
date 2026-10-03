@@ -29,6 +29,8 @@ export class PlaybackUnavailableError extends Error {}
 export type ResolvedSongSource = {
   uri: string;
   durationMs: number;
+  /** 音源码率（bps）；非会员账号各档位可能都返回试听码率，用于跳过无意义的换源。 */
+  bitrate?: number;
 };
 
 type SongUrlArgs = {
@@ -43,6 +45,7 @@ type SongUrlOutcome = {
   status: number;
   urls: string[];
   timeLength: unknown;
+  bitrate: unknown;
 };
 
 async function requestSongUrl(args: SongUrlArgs): Promise<SongUrlOutcome> {
@@ -63,6 +66,7 @@ async function requestSongUrl(args: SongUrlArgs): Promise<SongUrlOutcome> {
       ...collectUrls(body.backup_url),
     ],
     timeLength: body.timeLength,
+    bitrate: body.bitrate ?? body.bitRate,
   };
 }
 
@@ -149,6 +153,7 @@ export async function resolveSongSource(
 
   return {
     uri: outcome.urls[0],
+    bitrate: typeof outcome.bitrate === 'number' ? outcome.bitrate : undefined,
     durationMs: normalizeDurationMs(outcome.timeLength) || track.durationMs || 0,
   };
 }
