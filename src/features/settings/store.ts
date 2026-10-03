@@ -11,11 +11,19 @@ export type LyricAlign = 'center' | 'left';
 /** 播放音质；'flac' 需要会员，取不到时播放层自动回退标准音质。 */
 export type QualityId = '128' | '320' | 'flac';
 
+/** 歌词字号档位（px）。 */
+export type LyricFontSize = 18 | 22 | 26;
+
+export function isLyricFontSize(value: unknown): value is LyricFontSize {
+  return value === 18 || value === 22 || value === 26;
+}
+
 export type SettingsState = {
   hydrated: boolean;
   themeMode: ThemeMode;
   accentId: AccentPresetId;
   lyricAlign: LyricAlign;
+  lyricFontSize: LyricFontSize;
   quality: QualityId;
 };
 
@@ -24,6 +32,7 @@ const INITIAL_SETTINGS_STATE: SettingsState = {
   themeMode: 'system',
   accentId: DEFAULT_ACCENT_ID,
   lyricAlign: 'center',
+  lyricFontSize: 22,
   quality: '128',
 };
 
@@ -86,6 +95,7 @@ export function hydrateSettings(): Promise<void> {
         themeMode: stored && isThemeMode(stored.themeMode) ? stored.themeMode : 'system',
         accentId: stored && isAccentPresetId(stored.accentId) ? stored.accentId : DEFAULT_ACCENT_ID,
         lyricAlign: stored && isLyricAlign(stored.lyricAlign) ? stored.lyricAlign : 'center',
+        lyricFontSize: stored && isLyricFontSize(stored.lyricFontSize) ? stored.lyricFontSize : 22,
         quality: stored && isQualityId(stored.quality) ? stored.quality : '128',
         hydrated: true,
       });
@@ -97,8 +107,8 @@ export function hydrateSettings(): Promise<void> {
 }
 
 function persist() {
-  const { themeMode, accentId, lyricAlign, quality } = settingsStore.getState();
-  void writeStoredAppearance({ themeMode, accentId, lyricAlign, quality });
+  const { themeMode, accentId, lyricAlign, lyricFontSize, quality } = settingsStore.getState();
+  void writeStoredAppearance({ themeMode, accentId, lyricAlign, lyricFontSize, quality });
 }
 
 export const settingsActions = {
@@ -112,6 +122,10 @@ export const settingsActions = {
   },
   setLyricAlign(lyricAlign: LyricAlign) {
     settingsStore.setState({ lyricAlign });
+    persist();
+  },
+  setLyricFontSize(lyricFontSize: LyricFontSize) {
+    settingsStore.setState({ lyricFontSize });
     persist();
   },
   setQuality(quality: QualityId) {
@@ -152,6 +166,14 @@ export function useLyricAlign(): LyricAlign {
   );
 }
 
+export function useLyricFontSize(): LyricFontSize {
+  return useSyncExternalStore(
+    settingsStore.subscribe,
+    () => settingsStore.getState().lyricFontSize,
+    () => INITIAL_SETTINGS_STATE.lyricFontSize
+  );
+}
+
 export function useSettingsHydrated(): boolean {
   return useSyncExternalStore(
     settingsStore.subscribe,
@@ -163,4 +185,12 @@ export function useSettingsHydrated(): boolean {
 /** 供播放层在请求播放地址时读取音质偏好（非 hook 场景）。 */
 export function getPreferredQuality(): QualityId {
   return settingsStore.getState().quality;
+}
+
+export function useQuality(): QualityId {
+  return useSyncExternalStore(
+    settingsStore.subscribe,
+    () => settingsStore.getState().quality,
+    () => INITIAL_SETTINGS_STATE.quality
+  );
 }

@@ -13,17 +13,27 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Slider, Spinner, Text, View, XStack, YStack } from 'tamagui';
+import { Sheet, Slider, Spinner, Text, View, XStack, YStack } from 'tamagui';
 
 import { Artwork } from '@/components/ui/artwork';
 import { LyricsView } from '@/components/ui/lyrics-view';
 import { QueueSheet } from '@/components/ui/queue-sheet';
+import { OptionsSheet, LyricSettingsSheet } from '@/components/ui/option-sheet';
 import { showToast, ToastHost } from '@/components/ui/toast';
 import { TrackActionsSheet } from '@/components/ui/track-actions-sheet';
 import { findArtistByName } from '@/features/artist/artist-api';
 import { libraryActions, useIsLiked } from '@/features/library/store';
 import { playerActions, usePlayer, usePlayerProgress } from '@/features/player/store';
 import type { PlayMode } from '@/features/player/types';
+import {
+  settingsActions,
+  useLyricAlign,
+  useLyricFontSize,
+  useQuality,
+  type LyricAlign,
+  type LyricFontSize,
+  type QualityId,
+} from '@/features/settings/store';
 import { useIsDark, usePalette } from '@/hooks/use-palette';
 import { formatClock, sizedImage } from '@/lib/format';
 import { shareTrack } from '@/lib/share';
@@ -33,6 +43,29 @@ const MODE_ICON: Record<PlayMode, 'repeat' | 'repeat-once' | 'shuffle-variant'> 
   shuffle: 'shuffle-variant',
   single: 'repeat-once',
 };
+
+const QUALITY_BADGE: Record<QualityId, string> = {
+  '128': '标',
+  '320': 'HQ',
+  flac: 'SQ',
+};
+
+const QUALITY_OPTIONS: { value: QualityId; label: string; hint: string }[] = [
+  { value: '128', label: '标准音质', hint: '流畅，适合在线播放' },
+  { value: '320', label: '高清音质', hint: '320Kbps' },
+  { value: 'flac', label: '无损音质', hint: '需要酷狗会员，取不到时自动回退' },
+];
+
+const LYRIC_ALIGN_OPTIONS: { value: LyricAlign; label: string }[] = [
+  { value: 'center', label: '居中对齐' },
+  { value: 'left', label: '左对齐' },
+];
+
+const LYRIC_FONT_OPTIONS: { value: LyricFontSize; label: string }[] = [
+  { value: 18, label: '小' },
+  { value: 22, label: '标准' },
+  { value: 26, label: '大' },
+];
 
 /** 封面大圆角卡片：暂停时轻微降不透明度，替代旧旋转黑胶。 */
 function ArtworkCard({ coverUrl, playing, size }: { coverUrl: string | null; playing: boolean; size: number }) {
@@ -129,6 +162,9 @@ export default function PlayerScreen() {
   const [queueOpen, setQueueOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [likeBusy, setLikeBusy] = useState(false);
+  const [qualityOpen, setQualityOpen] = useState(false);
+  const [lyricSettingsOpen, setLyricSettingsOpen] = useState(false);
+  const quality = useQuality();
   const [artistBusy, setArtistBusy] = useState(false);
   const [lyricsMounted, setLyricsMounted] = useState(false);
   const pagerRef = useRef<ScrollView>(null);
@@ -347,13 +383,31 @@ export default function PlayerScreen() {
             </YStack>
           </YStack>
 
-          <YStack width={width} paddingTop={8}>
+          <YStack width={width} paddingTop={8} position="relative">
             {lyricsMounted ? (
-              <LyricsView
-                lines={lyrics}
-                status={lyricsStatus}
-                onSeekLine={handleSeekLine}
-              />
+              <>
+                <LyricsView
+                  lines={lyrics}
+                  status={lyricsStatus}
+                  onSeekLine={handleSeekLine}
+                />
+                {/* 歌词设置入口：对齐 + 字号 */}
+                <View
+                  position="absolute"
+                  top={4}
+                  right={18}
+                  width={38}
+                  height={38}
+                  borderRadius={19}
+                  alignItems="center"
+                  justifyContent="center"
+                  backgroundColor="rgba(127, 127, 127, 0.16)"
+                  transition="quickest"
+                  pressStyle={{ opacity: 0.6, scale: 0.92 }}
+                  onPress={() => setLyricSettingsOpen(true)}>
+                  <Ionicons name="text" size={19} color={palette.textSecondary} />
+                </View>
+              </>
             ) : null}
           </YStack>
         </ScrollView>
@@ -385,6 +439,31 @@ export default function PlayerScreen() {
               pressStyle={{ opacity: 0.55, scale: 0.88 }}
               onPress={() => setActionsOpen(true)}>
               <MaterialCommunityIcons name="playlist-plus" size={24} color={palette.textSecondary} />
+            </XStack>
+            <XStack
+              width={40}
+              height={40}
+              alignItems="center"
+              justifyContent="center"
+              transition="quickest"
+              pressStyle={{ opacity: 0.55, scale: 0.88 }}
+              onPress={() => setQualityOpen(true)}>
+              <View
+                width={30}
+                height={22}
+                borderRadius={6}
+                borderWidth={1.5}
+                borderColor={quality === 'flac' ? palette.accent : palette.textSecondary}
+                alignItems="center"
+                justifyContent="center">
+                <Text
+                  fontSize={9.5}
+                  fontWeight="800"
+                  letterSpacing={0.5}
+                  color={quality === 'flac' ? palette.accent : palette.textSecondary}>
+                  {QUALITY_BADGE[quality]}
+                </Text>
+              </View>
             </XStack>
             <XStack
               width={40}
@@ -473,6 +552,21 @@ export default function PlayerScreen() {
       </YStack>
 
       <QueueSheet open={queueOpen} onOpenChange={setQueueOpen} />
+      <OptionsSheet
+        open={qualityOpen}
+        onOpenChange={setQualityOpen}
+        title="播放音质"
+        options={QUALITY_OPTIONS}
+        value={quality}
+        onSelect={(next) => {
+          settingsActions.setQuality(next);
+          showToast(next === 'flac' ? '已选无损音质，取不到时会自动回退' : '音质已切换，下一首播放生效');
+        }}
+      />
+      <LyricSettingsSheet
+        open={lyricSettingsOpen}
+        onOpenChange={setLyricSettingsOpen}
+      />
       <TrackActionsSheet
         open={actionsOpen}
         onOpenChange={setActionsOpen}

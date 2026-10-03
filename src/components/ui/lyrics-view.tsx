@@ -13,7 +13,7 @@ import { Spinner, Text, YStack } from 'tamagui';
 import { findActiveLyricIndex } from '@/features/player/lyrics';
 import { usePlayerProgress, usePlayerProgressSelector } from '@/features/player/store';
 import type { LyricLine, LyricsStatus } from '@/features/player/types';
-import { useLyricAlign, type LyricAlign } from '@/features/settings/store';
+import { useLyricAlign, useLyricFontSize, type LyricAlign } from '@/features/settings/store';
 import { usePalette } from '@/hooks/use-palette';
 
 type LyricsViewProps = {
@@ -31,6 +31,7 @@ type LyricRowProps = {
   index: number;
   active: boolean;
   align: LyricAlign;
+  fontSize: number;
   activeColor: ComponentProps<typeof Text>['color'];
   inactiveColor: ComponentProps<typeof Text>['color'];
   onLayoutLine: (index: number, offset: number) => void;
@@ -42,6 +43,7 @@ const LyricRow = memo(function LyricRow({
   index,
   active,
   align,
+  fontSize,
   activeColor,
   inactiveColor,
   onLayoutLine,
@@ -57,8 +59,8 @@ const LyricRow = memo(function LyricRow({
         textAlign={align === 'center' ? 'center' : 'left'}
         color={active ? activeColor : inactiveColor}
         opacity={active ? 1 : 0.45}
-        fontSize={22}
-        lineHeight={30}
+        fontSize={fontSize}
+        lineHeight={Math.round(fontSize * 1.36)}
         fontWeight="700"
         style={styles.lineText}>
         {line.text}
@@ -75,6 +77,7 @@ function KaraokeLine({
   line,
   index,
   align,
+  fontSize,
   activeColor,
   inactiveColor,
   onLayoutLine,
@@ -83,6 +86,7 @@ function KaraokeLine({
   line: LyricLine;
   index: number;
   align: LyricAlign;
+  fontSize: number;
   activeColor: ComponentProps<typeof Text>['color'];
   inactiveColor: ComponentProps<typeof Text>['color'];
   onLayoutLine: (index: number, offset: number) => void;
@@ -148,8 +152,8 @@ function KaraokeLine({
       onPress={onSeekLine ? () => onSeekLine(line) : undefined}
       suppressHighlighting
       textAlign={align === 'center' ? 'center' : 'left'}
-      fontSize={22}
-      lineHeight={30}
+      fontSize={fontSize}
+      lineHeight={Math.round(fontSize * 1.36)}
       fontWeight="700"
       style={styles.lineText}>
       {line.text}
@@ -166,7 +170,9 @@ function KaraokeLine({
       {/* 底层：未唱部分 */}
       <Text
         color={inactiveColor}
-        style={styles.baseText}
+        fontSize={fontSize}
+        lineHeight={Math.round(fontSize * 1.36)}
+        fontWeight="700"
         textAlign={align === 'center' ? 'center' : 'left'}>
         {line.text}
       </Text>
@@ -182,7 +188,9 @@ function KaraokeLine({
           }>
           <Text
             color={activeColor}
-            style={styles.baseText}
+            fontSize={fontSize}
+            lineHeight={Math.round(fontSize * 1.36)}
+            fontWeight="700"
             textAlign={align === 'center' ? 'center' : 'left'}>
             {line.text}
           </Text>
@@ -195,6 +203,7 @@ function KaraokeLine({
 export function LyricsView({ lines, status, onSeekLine }: LyricsViewProps) {
   const palette = usePalette();
   const lyricAlign = useLyricAlign();
+  const lyricFontSize = useLyricFontSize();
   const scrollRef = useRef<ScrollView>(null);
   const lineOffsets = useRef<number[]>([]);
   const userScrollUntil = useRef(0);
@@ -281,6 +290,7 @@ export function LyricsView({ lines, status, onSeekLine }: LyricsViewProps) {
               line={line}
               index={index}
               align={lyricAlign}
+              fontSize={lyricFontSize}
               activeColor={palette.accent}
               inactiveColor={palette.textSecondary}
               onLayoutLine={handleLayoutLine}
@@ -293,6 +303,7 @@ export function LyricsView({ lines, status, onSeekLine }: LyricsViewProps) {
               index={index}
               active={index === activeIndex}
               align={lyricAlign}
+              fontSize={lyricFontSize}
               activeColor={palette.text}
               inactiveColor={palette.textSecondary}
               onLayoutLine={handleLayoutLine}

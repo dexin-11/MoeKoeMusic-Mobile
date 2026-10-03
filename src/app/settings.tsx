@@ -16,6 +16,7 @@ import {
   settingsActions,
   useSettings,
   type LyricAlign,
+  type LyricFontSize,
   type QualityId,
   type ThemeMode,
 } from '@/features/settings/store';
@@ -32,6 +33,12 @@ const LYRIC_ALIGN_OPTIONS = [
   { value: 'center', label: '居中对齐' },
   { value: 'left', label: '左对齐' },
 ] as const satisfies readonly { value: LyricAlign; label: string }[];
+
+const LYRIC_FONT_OPTIONS = [
+  { value: '18', label: '小' },
+  { value: '22', label: '标准' },
+  { value: '26', label: '大' },
+] as const satisfies readonly { value: string; label: string }[];
 
 const QUALITY_OPTIONS = [
   { value: '128', label: '标准' },
@@ -152,7 +159,7 @@ export default function SettingsScreen() {
   const scheme = useEffectiveScheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { themeMode, accentId, lyricAlign, quality } = useSettings();
+  const { themeMode, accentId, lyricAlign, lyricFontSize, quality } = useSettings();
   const [loggedIn, setLoggedIn] = useState(() => isLoggedIn());
   const [aboutVisible, setAboutVisible] = useState(false);
   const version = Constants.expoConfig?.version ?? '';
@@ -282,6 +289,17 @@ export default function SettingsScreen() {
                   options={LYRIC_ALIGN_OPTIONS}
                   value={lyricAlign}
                   onChange={settingsActions.setLyricAlign}
+                />
+              </YStack>
+              <View height={StyleSheet.hairlineWidth} backgroundColor={palette.border} />
+              <YStack gap={10}>
+                <Text color={palette.textSecondary} fontSize={13} fontWeight="600">
+                  歌词字号
+                </Text>
+                <SegmentedControl
+                  options={LYRIC_FONT_OPTIONS}
+                  value={String(lyricFontSize)}
+                  onChange={(next) => settingsActions.setLyricFontSize(Number(next) as LyricFontSize)}
                 />
               </YStack>
             </YStack>

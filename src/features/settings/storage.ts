@@ -6,6 +6,7 @@ export type StoredAppearance = {
   themeMode?: unknown;
   accentId?: unknown;
   lyricAlign?: unknown;
+  lyricFontSize?: unknown;
   quality?: unknown;
 };
 
@@ -24,6 +25,7 @@ export async function writeStoredAppearance(value: {
   themeMode: string;
   accentId: string;
   lyricAlign: string;
+  lyricFontSize: number;
   quality: string;
 }): Promise<void> {
   try {
