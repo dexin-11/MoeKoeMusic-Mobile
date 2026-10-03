@@ -218,13 +218,30 @@ async function loadTrackAt(index: number, options?: { autoplay?: boolean }) {
       return;
     }
 
+    // 取链兜底换过音源时（歌单下发的 hash 不标准），把实际音源标识回写到曲目，
+    // 歌词、锁屏等后续流程都以换源后的 hash 为准。
+    let effectiveTrack = track;
+    if (source.hash && source.hash !== track.hash) {
+      effectiveTrack = {
+        ...track,
+        hash: source.hash,
+        albumAudioId: source.albumAudioId ?? track.albumAudioId,
+      };
+      const { queue } = playerStore.getState();
+      const nextQueue = [...queue];
+      if (nextQueue[index]) {
+        nextQueue[index] = effectiveTrack;
+      }
+      playerStore.setState({ track: effectiveTrack, queue: nextQueue });
+    }
+
     const player = ensureAudioPlayer();
     player.replace({ uri: source.uri });
     currentSourceUri = source.uri;
     currentBitrate = source.bitrate ?? null;
     // 每次换曲重新激活即可同步刷新锁屏元数据;Android 侧同时启动前台服务,
     // 保证息屏后台连续播放不受系统 3 分钟限制。
-    player.setActiveForLockScreen(true, lockScreenMetadataFor(track), LOCK_SCREEN_OPTIONS);
+    player.setActiveForLockScreen(true, lockScreenMetadataFor(effectiveTrack), LOCK_SCREEN_OPTIONS);
     if (options?.autoplay !== false) {
       player.play();
     }

@@ -1,5 +1,5 @@
 import { pickStringLike, pickText } from '@/lib/api-parse';
-import { stripEmTags } from '@/lib/format';
+import { artistMatches, stripEmTags } from '@/lib/format';
 import { mobileApi } from '@/lib/kugou-api';
 
 import type { LyricLine, LyricWord, PlayerTrack } from './types';
@@ -159,22 +159,24 @@ type LyricSearchArgs = {
  * 2. 仅 hash（hash 本身可唯一定位歌词）；
  * 3. 歌词库认不出当前 hash 时（收藏读回的 hash 可能不是标准音源），用歌名搜索换标准 FileHash 再搜；
  * 4. 「歌手 + 歌名」关键词。
+ * 每一步都校验候选的歌手/歌名与当前曲目一致：hash 认不出时酷狗会按关键词模糊返回，
+ * 同名资源（如同名有声书）的歌词会被混进来。
  */
 async function findLyricCandidate(track: PlayerTrack): Promise<UnknownRecord | null> {
   if (track.albumAudioId) {
-    const candidate = pickCandidate(await searchLyricCandidates({ hash: track.hash, album_audio_id: track.albumAudioId }));
+    const candidate = pickCandidate(await searchLyricCandidates({ hash: track.hash, album_audio_id: track.albumAudioId }), track);
     if (candidate) {
       return candidate;
     }
   }
 
-  const hashOnly = pickCandidate(await searchLyricCandidates({ hash: track.hash }));
+  const hashOnly = pickCandidate(await searchLyricCandidates({ hash: track.hash }), track);
   if (hashOnly) {
     return hashOnly;
   }
 
   for (const replacement of await findLyricHashViaSearch(track)) {
-    const candidate = pickCandidate(await searchLyricCandidates(replacement));
+    const candidate = pickCandidate(await searchLyricCandidates(replacement), track);
     if (candidate) {
       return candidate;
     }
@@ -187,7 +189,8 @@ async function findLyricCandidate(track: PlayerTrack): Promise<UnknownRecord | n
         hash: track.hash,
         keywords: keyword,
         duration: track.durationMs ? Math.round(track.durationMs / 1000) * 1000 : 0,
-      })
+      }),
+      track
     );
     if (candidate) {
       return candidate;
@@ -208,13 +211,23 @@ async function findLyricHashViaSearch(track: PlayerTrack): Promise<LyricSearchAr
     const response = await mobileApi.search({ keywords: keyword, page: 1, pagesize: 10, type: 'song' });
     const records = toRecords(toRecord(toRecord(response.body).data).lists);
     const title = normalizeTitle(track.title);
+    const durationSec = track.durationMs ? Math.round(track.durationMs / 1000) : 0;
     return records
       .map((item) => ({
         hash: pickText(item.FileHash),
         title: pickText(item.OriSongName, item.SongName, item.FileName),
+        artist: pickText(item.Singername, item.SingerName),
+        durationSec: Number(item.Duration) || 0,
         albumAudioId: pickStringLike(item.MixSongID),
       }))
-      .filter((item) => item.hash && normalizeTitle(item.title) === title)
+      .filter(
+        (item) =>
+          item.hash &&
+          normalizeTitle(item.title) === title &&
+          // 同名资源（如同名有声书）也会命中歌名，按歌手过滤后再换 hash。
+          (!track.artist || track.artist === '未知歌手' || artistMatches(item.artist, track.artist))
+      )
+      .sort((a, b) => Math.abs((a.durationSec || durationSec) - durationSec) - Math.abs((b.durationSec || durationSec) - durationSec))
       .slice(0, 3)
       .map((item) => ({ hash: item.hash, album_audio_id: item.albumAudioId || 0 }));
   } catch {
@@ -230,12 +243,41 @@ function searchLyricCandidates(params: LyricSearchArgs) {
   return mobileApi.search_lyric(params).then((response) => toRecords(toRecord(response.body).candidates));
 }
 
-function pickCandidate(candidates: UnknownRecord[]): UnknownRecord | null {
-  const candidate = candidates[0];
-  if (!candidate || !candidate.id || !candidate.accesskey) {
+/**
+ * 从候选里挑第一个有 id/accesskey 且身份对得上的：
+ * 候选自带 song/singer 字段，与当前曲目明显不符（比如同名有声书）时跳过；
+ * 候选没有身份字段时只能照旧取第一个。
+ */
+function pickCandidate(candidates: UnknownRecord[], track: PlayerTrack): UnknownRecord | null {
+  const usable = candidates.filter((candidate) => candidate.id && candidate.accesskey);
+  if (!usable.length) {
     return null;
   }
-  return candidate;
+
+  const identified = usable.filter((candidate) => pickText(candidate.song) && pickText(candidate.singer));
+  const matched = identified.find((candidate) => candidateMatches(candidate, track));
+  if (matched) {
+    return matched;
+  }
+
+  // 候选都带身份但全对不上：宁可没歌词也不能给错的。
+  if (identified.length) {
+    return null;
+  }
+
+  return usable[0];
+}
+
+function candidateMatches(candidate: UnknownRecord, track: PlayerTrack): boolean {
+  const candidateTitle = normalizeTitle(pickText(candidate.song));
+  const trackTitle = normalizeTitle(track.title);
+  const titleMatched =
+    candidateTitle === trackTitle || candidateTitle.includes(trackTitle) || trackTitle.includes(candidateTitle);
+
+  const candidateArtist = pickText(candidate.singer);
+  const artistMatched = !track.artist || track.artist === '未知歌手' || artistMatches(candidateArtist, track.artist);
+
+  return titleMatched && artistMatched;
 }
 
 export function findActiveLyricIndex(lines: LyricLine[], positionMs: number): number {
