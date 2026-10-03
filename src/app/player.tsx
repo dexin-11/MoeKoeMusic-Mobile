@@ -333,7 +333,21 @@ export default function PlayerScreen() {
               ))}
             </XStack>
           </YStack>
-          <View width={40} height={40} />
+          {pageIndex === 1 ? (
+            <XStack
+              width={40}
+              height={40}
+              borderRadius={20}
+              alignItems="center"
+              justifyContent="center"
+              transition="quickest"
+              pressStyle={{ opacity: 0.6, scale: 0.92 }}
+              onPress={() => setLyricSettingsOpen(true)}>
+              <Ionicons name="options-outline" size={21} color={palette.textSecondary} />
+            </XStack>
+          ) : (
+            <View width={40} height={40} />
+          )}
         </XStack>
 
         {/* 封面 / 歌词 双页 */}
@@ -385,29 +399,11 @@ export default function PlayerScreen() {
 
           <YStack width={width} paddingTop={8} position="relative">
             {lyricsMounted ? (
-              <>
-                <LyricsView
-                  lines={lyrics}
-                  status={lyricsStatus}
-                  onSeekLine={handleSeekLine}
-                />
-                {/* 歌词设置入口：对齐 + 字号 */}
-                <View
-                  position="absolute"
-                  top={4}
-                  right={18}
-                  width={38}
-                  height={38}
-                  borderRadius={19}
-                  alignItems="center"
-                  justifyContent="center"
-                  backgroundColor="rgba(127, 127, 127, 0.16)"
-                  transition="quickest"
-                  pressStyle={{ opacity: 0.6, scale: 0.92 }}
-                  onPress={() => setLyricSettingsOpen(true)}>
-                  <Ionicons name="text" size={19} color={palette.textSecondary} />
-                </View>
-              </>
+              <LyricsView
+                lines={lyrics}
+                status={lyricsStatus}
+                onSeekLine={handleSeekLine}
+              />
             ) : null}
           </YStack>
         </ScrollView>
