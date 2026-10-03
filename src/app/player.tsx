@@ -20,6 +20,7 @@ import { LyricsView } from '@/components/ui/lyrics-view';
 import { QueueSheet } from '@/components/ui/queue-sheet';
 import { showToast, ToastHost } from '@/components/ui/toast';
 import { TrackActionsSheet } from '@/components/ui/track-actions-sheet';
+import { findArtistByName } from '@/features/artist/artist-api';
 import { libraryActions, useIsLiked } from '@/features/library/store';
 import { playerActions, usePlayer, usePlayerProgress } from '@/features/player/store';
 import type { PlayMode } from '@/features/player/types';
@@ -128,11 +129,34 @@ export default function PlayerScreen() {
   const [queueOpen, setQueueOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [likeBusy, setLikeBusy] = useState(false);
+  const [artistBusy, setArtistBusy] = useState(false);
   const [lyricsMounted, setLyricsMounted] = useState(false);
   const pagerRef = useRef<ScrollView>(null);
 
   const { track, playing, loading, buffering, mode, error, lyrics, lyricsStatus } = player;
   const liked = useIsLiked(track?.hash);
+
+  /** 播放页只有歌手名没有 id：先按名字搜出歌手再跳主页。 */
+  function openArtistPage() {
+    if (!track || artistBusy) {
+      return;
+    }
+
+    setArtistBusy(true);
+    findArtistByName(track.artist || '未知歌手')
+      .then((artist) => {
+        if (artist) {
+          router.push({
+            pathname: '/artist/[id]',
+            params: { id: artist.id, name: artist.name, avatar: artist.avatarUrl ?? '' },
+          });
+        } else {
+          showToast('没有找到这位歌手的主页');
+        }
+      })
+      .catch(() => showToast('歌手主页打开失败，请稍后再试'))
+      .finally(() => setArtistBusy(false));
+  }
 
   useEffect(() => {
     // 提前加载歌单库,让心形按钮反映真实喜欢状态
@@ -296,7 +320,13 @@ export default function PlayerScreen() {
                 numberOfLines={1}>
                 {track.title}
               </Text>
-              <Text color={palette.textSecondary} fontSize={15} numberOfLines={1}>
+              <Text
+                color={palette.textSecondary}
+                fontSize={15}
+                numberOfLines={1}
+                transition="quickest"
+                pressStyle={{ opacity: 0.6 }}
+                onPress={openArtistPage}>
                 {track.artist || '未知歌手'}
               </Text>
               {error ? (

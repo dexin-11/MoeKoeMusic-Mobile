@@ -2,6 +2,8 @@ import { pickStringLike, pickText, toRecords } from '@/lib/api-parse';
 import { normalizeDurationMs, stripEmTags } from '@/lib/format';
 import { mobileApi } from '@/lib/kugou-api';
 
+import { getPreferredQuality } from '@/features/settings/store';
+
 import type { PlayerTrack } from './types';
 
 type UnknownRecord = Record<string, unknown>;
@@ -33,6 +35,8 @@ type SongUrlArgs = {
   hash: string;
   album_id: string | number;
   album_audio_id: string | number;
+  /** 酷狗音质标识：128 / 320 / flac；缺省为 128。 */
+  quality?: string;
 };
 
 type SongUrlOutcome = {
@@ -46,6 +50,7 @@ async function requestSongUrl(args: SongUrlArgs): Promise<SongUrlOutcome> {
     hash: args.hash,
     album_id: args.album_id,
     album_audio_id: args.album_audio_id,
+    quality: args.quality,
     free_part: 1,
   });
 
@@ -107,19 +112,27 @@ export async function resolveSongSource(track: PlayerTrack): Promise<ResolvedSon
     return resolveCloudSource(track);
   }
 
+  const quality = getPreferredQuality();
   let outcome = await requestSongUrl({
     hash: track.hash,
     album_id: track.albumId ?? 0,
     album_audio_id: track.albumAudioId ?? 0,
+    quality,
   });
+
+  if (!outcome.urls.length && quality !== '128') {
+    // 高清/无损大概率因会员限制取不到，先退回标准音质再试。
+    outcome = await requestSongUrl({
+      hash: track.hash,
+      album_id: track.albumId ?? 0,
+      album_audio_id: track.albumAudioId ?? 0,
+    });
+  }
 
   if (!outcome.urls.length) {
     const replacement = await findSearchReplacement(track);
     if (replacement) {
-      const retried = await requestSongUrl(replacement);
-      if (retried.urls.length) {
-        outcome = retried;
-      }
+      outcome = await requestSongUrl(replacement);
     }
   }
 

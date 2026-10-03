@@ -6,16 +6,25 @@ import { readStoredAppearance, writeStoredAppearance } from './storage';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
+export type LyricAlign = 'center' | 'left';
+
+/** 播放音质；'flac' 需要会员，取不到时播放层自动回退标准音质。 */
+export type QualityId = '128' | '320' | 'flac';
+
 export type SettingsState = {
   hydrated: boolean;
   themeMode: ThemeMode;
   accentId: AccentPresetId;
+  lyricAlign: LyricAlign;
+  quality: QualityId;
 };
 
 const INITIAL_SETTINGS_STATE: SettingsState = {
   hydrated: false,
   themeMode: 'system',
   accentId: DEFAULT_ACCENT_ID,
+  lyricAlign: 'center',
+  quality: '128',
 };
 
 function createStore<T extends object>(initial: T) {
@@ -58,6 +67,14 @@ function isThemeMode(value: unknown): value is ThemeMode {
   return value === 'system' || value === 'light' || value === 'dark';
 }
 
+function isLyricAlign(value: unknown): value is LyricAlign {
+  return value === 'center' || value === 'left';
+}
+
+function isQualityId(value: unknown): value is QualityId {
+  return value === '128' || value === '320' || value === 'flac';
+}
+
 let hydrationPromise: Promise<void> | null = null;
 
 /** 在根布局模块作用域调用一次;UI 由 hydrated 门控,不存在与用户操作的竞态。 */
@@ -68,6 +85,8 @@ export function hydrateSettings(): Promise<void> {
       settingsStore.setState({
         themeMode: stored && isThemeMode(stored.themeMode) ? stored.themeMode : 'system',
         accentId: stored && isAccentPresetId(stored.accentId) ? stored.accentId : DEFAULT_ACCENT_ID,
+        lyricAlign: stored && isLyricAlign(stored.lyricAlign) ? stored.lyricAlign : 'center',
+        quality: stored && isQualityId(stored.quality) ? stored.quality : '128',
         hydrated: true,
       });
     })().catch(() => {
@@ -78,8 +97,8 @@ export function hydrateSettings(): Promise<void> {
 }
 
 function persist() {
-  const { themeMode, accentId } = settingsStore.getState();
-  void writeStoredAppearance({ themeMode, accentId });
+  const { themeMode, accentId, lyricAlign, quality } = settingsStore.getState();
+  void writeStoredAppearance({ themeMode, accentId, lyricAlign, quality });
 }
 
 export const settingsActions = {
@@ -89,6 +108,14 @@ export const settingsActions = {
   },
   setAccentId(accentId: AccentPresetId) {
     settingsStore.setState({ accentId });
+    persist();
+  },
+  setLyricAlign(lyricAlign: LyricAlign) {
+    settingsStore.setState({ lyricAlign });
+    persist();
+  },
+  setQuality(quality: QualityId) {
+    settingsStore.setState({ quality });
     persist();
   },
 };
@@ -117,10 +144,23 @@ export function useAccentId(): AccentPresetId {
   );
 }
 
+export function useLyricAlign(): LyricAlign {
+  return useSyncExternalStore(
+    settingsStore.subscribe,
+    () => settingsStore.getState().lyricAlign,
+    () => INITIAL_SETTINGS_STATE.lyricAlign
+  );
+}
+
 export function useSettingsHydrated(): boolean {
   return useSyncExternalStore(
     settingsStore.subscribe,
     () => settingsStore.getState().hydrated,
     () => INITIAL_SETTINGS_STATE.hydrated
   );
+}
+
+/** 供播放层在请求播放地址时读取音质偏好（非 hook 场景）。 */
+export function getPreferredQuality(): QualityId {
+  return settingsStore.getState().quality;
 }
