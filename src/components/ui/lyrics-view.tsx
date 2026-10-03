@@ -33,23 +33,21 @@ type LyricRowProps = {
   showTranslation: boolean;
   activeColor: ComponentProps<typeof Text>['color'];
   inactiveColor: ComponentProps<typeof Text>['color'];
-  translationColor: ComponentProps<typeof Text>['color'];
   onLayoutLine: (index: number, offset: number) => void;
   onSeekLine?: (line: LyricLine) => void;
 };
 
-/** 翻译行：恒为次级灰色，独立字号。 */
+/** 翻译行：无论所在行是否正在播放，永远为次级灰色（颜色在此处固化，不经调用方传入）。 */
 function TranslationText({
   line,
   align,
   fontSize,
-  color,
 }: {
   line: LyricLine;
   align: LyricAlign;
   fontSize: number;
-  color: ComponentProps<typeof Text>['color'];
 }) {
+  const palette = usePalette();
   if (!line.translation) {
     return null;
   }
@@ -58,7 +56,7 @@ function TranslationText({
     <Text
       suppressHighlighting
       textAlign={align === 'center' ? 'center' : 'left'}
-      color={color}
+      color={palette.textSecondary}
       opacity={0.85}
       fontSize={fontSize}
       lineHeight={Math.round(fontSize * 1.3)}
@@ -78,7 +76,6 @@ const LyricRow = memo(function LyricRow({
   showTranslation,
   activeColor,
   inactiveColor,
-  translationColor,
   onLayoutLine,
   onSeekLine,
 }: LyricRowProps) {
@@ -104,7 +101,6 @@ const LyricRow = memo(function LyricRow({
           line={line}
           align={align}
           fontSize={translationFontSize}
-          color={translationColor}
         />
       ) : null}
     </View>
@@ -206,7 +202,6 @@ export function LyricsView({ lines, status, onSeekLine }: LyricsViewProps) {
             showTranslation={showTranslation}
             activeColor={palette.text}
             inactiveColor={palette.textSecondary}
-            translationColor={palette.textSecondary}
             onLayoutLine={handleLayoutLine}
             onSeekLine={onSeekLine}
           />
