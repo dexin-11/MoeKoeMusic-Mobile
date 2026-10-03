@@ -2,7 +2,7 @@ import { pickStringLike, pickText, toRecords } from '@/lib/api-parse';
 import { normalizeDurationMs, stripEmTags } from '@/lib/format';
 import { mobileApi } from '@/lib/kugou-api';
 
-import { getPreferredQuality } from '@/features/settings/store';
+import { getPreferredQuality, type QualityId } from '@/features/settings/store';
 
 import type { PlayerTrack } from './types';
 
@@ -107,12 +107,15 @@ async function findSearchReplacement(track: PlayerTrack): Promise<SongUrlArgs | 
 }
 
 /** 解析歌曲真实播放地址；无版权/需付费时抛 PlaybackUnavailableError。 */
-export async function resolveSongSource(track: PlayerTrack): Promise<ResolvedSongSource> {
+export async function resolveSongSource(
+  track: PlayerTrack,
+  qualityOverride?: QualityId
+): Promise<ResolvedSongSource> {
   if (track.source === 'cloud') {
     return resolveCloudSource(track);
   }
 
-  const quality = getPreferredQuality();
+  const quality = qualityOverride ?? getPreferredQuality();
   let outcome = await requestSongUrl({
     hash: track.hash,
     album_id: track.albumId ?? 0,

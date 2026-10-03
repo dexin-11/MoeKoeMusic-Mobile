@@ -559,8 +559,8 @@ export default function PlayerScreen() {
         options={QUALITY_OPTIONS}
         value={quality}
         onSelect={(next) => {
-          settingsActions.setQuality(next);
-          showToast(next === 'flac' ? '已选无损音质，取不到时会自动回退' : '音质已切换，下一首播放生效');
+          void playerActions.applyQuality(next);
+          showToast(next === 'flac' ? '已选无损音质，取不到时会自动回退' : '音质已切换');
         }}
       />
       <LyricSettingsSheet

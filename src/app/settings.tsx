@@ -12,6 +12,7 @@ import { ACCENT_PRESETS, getPalette, type AccentPreset } from '@/constants/accen
 import { MaxContentWidth, type SchemeName } from '@/constants/theme';
 import { isLoggedIn } from '@/features/account/user-api';
 import { libraryActions } from '@/features/library/store';
+import { playerActions } from '@/features/player/store';
 import {
   settingsActions,
   useSettings,
@@ -272,7 +273,7 @@ export default function SettingsScreen() {
                 <SegmentedControl
                   options={QUALITY_OPTIONS}
                   value={quality}
-                  onChange={settingsActions.setQuality}
+                  onChange={(next) => void playerActions.applyQuality(next as QualityId)}
                 />
                 {quality === 'flac' ? (
                   <Text color={palette.textTertiary} fontSize={11}>

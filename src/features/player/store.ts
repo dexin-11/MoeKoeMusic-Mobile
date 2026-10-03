@@ -10,6 +10,8 @@ import { useSyncExternalStore } from 'react';
 
 import { sizedImage } from '@/lib/format';
 
+import { settingsActions, type QualityId } from '@/features/settings/store';
+
 import { loadLyricLines } from './lyrics';
 import { resolveSongSource } from './song-url';
 import type { LyricLine, LyricsStatus, PlayMode, PlayerTrack } from './types';
@@ -96,6 +98,8 @@ const progressStore = createStore(INITIAL_PROGRESS_STATE);
 let audioPlayer: AudioPlayer | null = null;
 let loadSequence = 0;
 let failStreak = 0;
+/** 当前 player 里装载的音源地址；切音质时用它判断是否真的换了源。 */
+let currentSourceUri: string | null = null;
 let advanceTimer: ReturnType<typeof setTimeout> | null = null;
 // 每次“建立新队列”都会自增；后台补齐歌单剩余曲目时靠它判断队列是否已被替换。
 let queueGeneration = 0;
@@ -214,6 +218,7 @@ async function loadTrackAt(index: number, options?: { autoplay?: boolean }) {
 
     const player = ensureAudioPlayer();
     player.replace({ uri: source.uri });
+    currentSourceUri = source.uri;
     // 每次换曲重新激活即可同步刷新锁屏元数据;Android 侧同时启动前台服务,
     // 保证息屏后台连续播放不受系统 3 分钟限制。
     player.setActiveForLockScreen(true, lockScreenMetadataFor(track), LOCK_SCREEN_OPTIONS);
@@ -400,6 +405,49 @@ export const playerActions = {
     void skip(-1);
   },
 
+  /**
+   * 切换音质并立即对当前歌曲生效：换新音源后跳回原进度继续播，
+   * 不从头开始；云盘歌曲与解析失败时保持现状。
+   */
+  async applyQuality(quality: QualityId) {
+    settingsActions.setQuality(quality);
+
+    const state = playerStore.getState();
+    if (!state.track || state.track.source === 'cloud' || state.loading) {
+      return;
+    }
+
+    try {
+      const source = await resolveSongSource(state.track, quality);
+      if (!source.uri || source.uri === currentSourceUri) {
+        return;
+      }
+
+      const player = ensureAudioPlayer();
+      const { positionMs } = progressStore.getState();
+      const wasPlaying = state.playing;
+      const sequence = loadSequence;
+
+      playerStore.setState({ loading: true, error: '' });
+      player.replace({ uri: source.uri });
+      currentSourceUri = source.uri;
+      // 换源后给原生层一点加载时间再跳进度，避免 seek 落空回到 0。
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      await player.seekTo(positionMs / 1000);
+      progressStore.setState({ positionMs, positionUpdatedAt: Date.now() });
+      if (wasPlaying) {
+        player.play();
+      } else {
+        player.pause();
+      }
+      if (sequence === loadSequence) {
+        playerStore.setState({ loading: false });
+      }
+    } catch {
+      // 换源失败静默保留当前播放，用户可继续用原音质听。
+    }
+  },
+
   seekToMs(positionMs: number) {
     const { track } = playerStore.getState();
     if (!track || !audioPlayer) {
@@ -466,6 +514,7 @@ export const playerActions = {
       advanceTimer = null;
     }
 
+    currentSourceUri = null;
     audioPlayer?.pause();
     audioPlayer?.clearLockScreenControls();
     playerStore.setState({
