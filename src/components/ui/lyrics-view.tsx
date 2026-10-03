@@ -220,11 +220,12 @@ function KaraokeLine({
         style={styles.lineText}>
         {line.text}
       </Text>
-      {/* 上层：已唱部分，矩形遮罩从左向右揭示 */}
+      {/* 上层：已唱部分，矩形遮罩从左向右揭示。
+          必须用默认的 software 渲染模式：hardware 模式在 Android 上把遮罩
+          光栅化一次后不再响应 reanimated 的宽度更新，彩色层会整句不显示 */}
       {lineWidth ? (
         <MaskedView
           style={StyleSheet.absoluteFill}
-          androidRenderingMode="hardware"
           maskElement={<Animated.View style={[styles.maskFill, fillStyle]} />}>
           <Text
             color={activeColor}
