@@ -17,7 +17,6 @@ import { Spinner, Text, View, XStack, YStack } from 'tamagui';
 
 import { Artwork } from '@/components/ui/artwork';
 import { playerActions, usePlayer, usePlayerProgress } from '@/features/player/store';
-import { useAnimationsEnabled } from '@/features/settings/store';
 import { useIsDark, usePalette } from '@/hooks/use-palette';
 
 export const MINI_PLAYER_HEIGHT = 58;
@@ -55,13 +54,12 @@ function ProgressHairline() {
 export function MiniPlayer() {
   const palette = usePalette();
   const isDark = useIsDark();
-  const animationsEnabled = useAnimationsEnabled();
   const router = useRouter();
   const { track, playing, loading, buffering } = usePlayer();
   const rotation = useSharedValue(0);
 
   useEffect(() => {
-    if (playing && animationsEnabled) {
+    if (playing) {
       rotation.value = withRepeat(
         withTiming(rotation.value + 360, { duration: 16000, easing: Easing.linear }),
         -1,
@@ -70,7 +68,7 @@ export function MiniPlayer() {
     } else {
       cancelAnimation(rotation);
     }
-  }, [playing, animationsEnabled, rotation]);
+  }, [playing, rotation]);
 
   const spinStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value % 360}deg` }],
@@ -108,7 +106,7 @@ export function MiniPlayer() {
       shadowRadius={isDark ? 8 : 16}
       elevation={isDark ? 0 : 8}
       transition="quickest"
-      pressStyle={{ scale: 0.98, opacity: 0.9 }}
+      pressStyle={{ scale: 0.985 }}
       onPress={openPlayer}>
         <Animated.View style={[{ width: 40, height: 40 }, spinStyle]}>
           <Artwork uri={track.coverUrl} size={40} circle />
@@ -167,9 +165,7 @@ export function MiniPlayer() {
   );
 
   return (
-    <Animated.View
-      entering={animationsEnabled ? FadeInDown.duration(260).springify().damping(20) : undefined}
-      exiting={animationsEnabled ? FadeOutDown.duration(180) : undefined}>
+    <Animated.View entering={FadeInDown.duration(260)} exiting={FadeOutDown.duration(200)}>
       {GLASS_AVAILABLE ? (
         <GlassView
           style={{ height: MINI_PLAYER_HEIGHT, borderRadius: 22, overflow: 'hidden' }}

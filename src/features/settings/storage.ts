@@ -8,7 +8,6 @@ export type StoredAppearance = {
   lyricAlign?: unknown;
   lyricFontSize?: unknown;
   quality?: unknown;
-  animationsEnabled?: unknown;
 };
 
 export async function readStoredAppearance(): Promise<StoredAppearance | null> {
@@ -28,7 +27,6 @@ export async function writeStoredAppearance(value: {
   lyricAlign: string;
   lyricFontSize: number;
   quality: string;
-  animationsEnabled: boolean;
 }): Promise<void> {
   try {
     await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(value));

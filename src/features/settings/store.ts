@@ -25,8 +25,6 @@ export type SettingsState = {
   lyricAlign: LyricAlign;
   lyricFontSize: LyricFontSize;
   quality: QualityId;
-  /** 关闭后过渡/入场动画全部瞬时化，降低功耗（歌曲逐字歌词等必要动效除外）。 */
-  animationsEnabled: boolean;
 };
 
 const INITIAL_SETTINGS_STATE: SettingsState = {
@@ -36,7 +34,6 @@ const INITIAL_SETTINGS_STATE: SettingsState = {
   lyricAlign: 'center',
   lyricFontSize: 22,
   quality: '128',
-  animationsEnabled: true,
 };
 
 function createStore<T extends object>(initial: T) {
@@ -100,10 +97,6 @@ export function hydrateSettings(): Promise<void> {
         lyricAlign: stored && isLyricAlign(stored.lyricAlign) ? stored.lyricAlign : 'center',
         lyricFontSize: stored && isLyricFontSize(stored.lyricFontSize) ? stored.lyricFontSize : 22,
         quality: stored && isQualityId(stored.quality) ? stored.quality : '128',
-        animationsEnabled:
-          stored && typeof stored.animationsEnabled === 'boolean'
-            ? stored.animationsEnabled
-            : true,
         hydrated: true,
       });
     })().catch(() => {
@@ -114,16 +107,8 @@ export function hydrateSettings(): Promise<void> {
 }
 
 function persist() {
-  const { themeMode, accentId, lyricAlign, lyricFontSize, quality, animationsEnabled } =
-    settingsStore.getState();
-  void writeStoredAppearance({
-    themeMode,
-    accentId,
-    lyricAlign,
-    lyricFontSize,
-    quality,
-    animationsEnabled,
-  });
+  const { themeMode, accentId, lyricAlign, lyricFontSize, quality } = settingsStore.getState();
+  void writeStoredAppearance({ themeMode, accentId, lyricAlign, lyricFontSize, quality });
 }
 
 export const settingsActions = {
@@ -145,10 +130,6 @@ export const settingsActions = {
   },
   setQuality(quality: QualityId) {
     settingsStore.setState({ quality });
-    persist();
-  },
-  setAnimationsEnabled(animationsEnabled: boolean) {
-    settingsStore.setState({ animationsEnabled });
     persist();
   },
 };
@@ -211,13 +192,5 @@ export function useQuality(): QualityId {
     settingsStore.subscribe,
     () => settingsStore.getState().quality,
     () => INITIAL_SETTINGS_STATE.quality
-  );
-}
-
-export function useAnimationsEnabled(): boolean {
-  return useSyncExternalStore(
-    settingsStore.subscribe,
-    () => settingsStore.getState().animationsEnabled,
-    () => INITIAL_SETTINGS_STATE.animationsEnabled
   );
 }
