@@ -57,8 +57,8 @@ export type AccentPreset = {
 };
 
 export const ACCENT_PRESETS: readonly AccentPreset[] = [
-  { id: 'apple', label: 'Apple 红', light: '#FA2D48', dark: '#FF4557' },
   { id: 'pink', label: '樱花粉', light: '#FF5C9E', dark: '#FF7EB6' },
+  { id: 'apple', label: 'Apple 红', light: '#FA2D48', dark: '#FF4557' },
   { id: 'blue', label: '海空蓝', light: '#3D8BFF', dark: '#66A3FF' },
   { id: 'purple', label: '星紫', light: '#8B5CF6', dark: '#A37EF8' },
   { id: 'green', label: '薄荷绿', light: '#12B886', dark: '#44C79F' },
@@ -66,7 +66,7 @@ export const ACCENT_PRESETS: readonly AccentPreset[] = [
   { id: 'orange', label: '落日橙', light: '#FF7A45', dark: '#FF966C' },
 ];
 
-export const DEFAULT_ACCENT_ID: AccentPresetId = 'apple';
+export const DEFAULT_ACCENT_ID: AccentPresetId = 'pink';
 
 export function isAccentPresetId(value: unknown): value is AccentPresetId {
   return typeof value === 'string' && ACCENT_PRESETS.some((preset) => preset.id === value);
