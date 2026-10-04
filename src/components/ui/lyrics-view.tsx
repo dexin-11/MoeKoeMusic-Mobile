@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useEffect, useRef, useState, type ComponentProps } from 'react';
-import { Platform, ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Spinner, Text, YStack } from 'tamagui';
 
 import { findActiveLyricIndex } from '@/features/player/lyrics';
@@ -13,8 +13,7 @@ import {
   useShowLyricTranslation,
   type LyricAlign,
 } from '@/features/settings/store';
-import { useIsDark, usePalette } from '@/hooks/use-palette';
-import { BlurViewModule } from '@/lib/blur';
+import { usePalette } from '@/hooks/use-palette';
 
 type LyricsViewProps = {
   lines: LyricLine[];
@@ -109,7 +108,6 @@ const LyricRow = memo(function LyricRow({
 
 export function LyricsView({ lines, status, onSeekLine }: LyricsViewProps) {
   const palette = usePalette();
-  const isDark = useIsDark();
   const lyricAlign = useLyricAlign();
   const lyricFontSize = useLyricFontSize();
   const showTranslation = useShowLyricTranslation();
@@ -201,68 +199,18 @@ export function LyricsView({ lines, status, onSeekLine }: LyricsViewProps) {
         ))}
       </ScrollView>
 
-      {/* 上下毛玻璃边缘：歌词从模糊层下滑过 */}
-      <GlassEdge isDark={isDark} palette={palette} top height={edgeHeight} />
-      <GlassEdge isDark={isDark} palette={palette} height={edgeHeight} />
+      {/* 上下边缘：背景色渐隐，歌词从边缘淡出 */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={[palette.background, 'transparent']}
+        style={[styles.edge, { top: 0, height: edgeHeight }]}
+      />
+      <LinearGradient
+        pointerEvents="none"
+        colors={['transparent', palette.background]}
+        style={[styles.edge, { bottom: 0, height: edgeHeight }]}
+      />
     </View>
-  );
-}
-
-/**
- * 边缘毛玻璃条：
- * - Web 用自定义 backdropFilter（expo-blur 的 web 实现自带一层过重的白色蒙层，观感是白块）；
- * - 原生端优先 expo-blur（当前 APK 无该原生模块则返回 null）；
- * - 都不可用时降级为背景色渐隐。
- */
-function GlassEdge({
-  isDark,
-  palette,
-  top,
-  height,
-}: {
-  isDark: boolean;
-  palette: ReturnType<typeof usePalette>;
-  top?: boolean;
-  height: number;
-}) {
-  const positionStyle: { top?: number; bottom?: number; height: number } = top
-    ? { top: 0, height }
-    : { bottom: 0, height };
-
-  if (Platform.OS === 'web') {
-    return (
-      <View
-        pointerEvents="none"
-        style={[
-          styles.edge,
-          positionStyle,
-          {
-            backdropFilter: 'blur(22px) saturate(160%)',
-            backgroundColor: isDark ? 'rgba(14, 15, 22, 0.42)' : 'rgba(255, 255, 255, 0.42)',
-          },
-        ]}
-      />
-    );
-  }
-
-  if (BlurViewModule) {
-    return (
-      <BlurViewModule.BlurView
-        intensity={isDark ? 40 : 60}
-        tint={isDark ? 'dark' : 'light'}
-        experimentalBlurMethod="dimezis"
-        pointerEvents="none"
-        style={[styles.edge, positionStyle]}
-      />
-    );
-  }
-
-  return (
-    <LinearGradient
-      pointerEvents="none"
-      colors={top ? [palette.background, 'transparent'] : ['transparent', palette.background]}
-      style={[styles.edge, positionStyle]}
-    />
   );
 }
 

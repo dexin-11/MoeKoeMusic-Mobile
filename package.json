@@ -26,7 +26,6 @@
     "expo": "~57.0.26",
     "expo-asset": "~57.0.3",
     "expo-audio": "~57.0.5",
-    "expo-blur": "~57.0.3",
     "expo-build-properties": "~57.0.22",
     "expo-constants": "~57.0.3",
     "expo-dev-client": "~57.0.19",
