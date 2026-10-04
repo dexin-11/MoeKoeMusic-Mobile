@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
 import { DEFAULT_ACCENT_ID, isAccentPresetId, type AccentPresetId } from '@/constants/accents';
-import { setAppAnimationsEnabled } from '@/constants/motion';
 
 import { readStoredAppearance, writeStoredAppearance } from './storage';
 
@@ -28,8 +27,6 @@ export type SettingsState = {
   quality: QualityId;
   /** 关闭后过渡/入场动画全部瞬时化，降低功耗（歌曲逐字歌词等必要动效除外）。 */
   animationsEnabled: boolean;
-  /** 外国歌曲的歌词翻译行是否显示。 */
-  showLyricTranslation: boolean;
 };
 
 const INITIAL_SETTINGS_STATE: SettingsState = {
@@ -40,7 +37,6 @@ const INITIAL_SETTINGS_STATE: SettingsState = {
   lyricFontSize: 22,
   quality: '128',
   animationsEnabled: true,
-  showLyricTranslation: true,
 };
 
 function createStore<T extends object>(initial: T) {
@@ -108,24 +104,17 @@ export function hydrateSettings(): Promise<void> {
           stored && typeof stored.animationsEnabled === 'boolean'
             ? stored.animationsEnabled
             : true,
-        showLyricTranslation:
-          stored && typeof stored.showLyricTranslation === 'boolean'
-            ? stored.showLyricTranslation
-            : true,
         hydrated: true,
       });
-      })().catch(() => {
-        settingsStore.setState({ hydrated: true });
-      }).finally(() => {
-        // 动画开关在 store 层直接生效，不依赖任何组件渲染
-        setAppAnimationsEnabled(settingsStore.getState().animationsEnabled);
-      });
+    })().catch(() => {
+      settingsStore.setState({ hydrated: true });
+    });
   }
   return hydrationPromise;
 }
 
 function persist() {
-  const { themeMode, accentId, lyricAlign, lyricFontSize, quality, animationsEnabled, showLyricTranslation } =
+  const { themeMode, accentId, lyricAlign, lyricFontSize, quality, animationsEnabled } =
     settingsStore.getState();
   void writeStoredAppearance({
     themeMode,
@@ -134,7 +123,6 @@ function persist() {
     lyricFontSize,
     quality,
     animationsEnabled,
-    showLyricTranslation,
   });
 }
 
@@ -161,12 +149,6 @@ export const settingsActions = {
   },
   setAnimationsEnabled(animationsEnabled: boolean) {
     settingsStore.setState({ animationsEnabled });
-    // 点击开关的瞬间就让动画表生效，不等任何组件重渲染
-    setAppAnimationsEnabled(animationsEnabled);
-    persist();
-  },
-  setShowLyricTranslation(showLyricTranslation: boolean) {
-    settingsStore.setState({ showLyricTranslation });
     persist();
   },
 };
@@ -237,13 +219,5 @@ export function useAnimationsEnabled(): boolean {
     settingsStore.subscribe,
     () => settingsStore.getState().animationsEnabled,
     () => INITIAL_SETTINGS_STATE.animationsEnabled
-  );
-}
-
-export function useShowLyricTranslation(): boolean {
-  return useSyncExternalStore(
-    settingsStore.subscribe,
-    () => settingsStore.getState().showLyricTranslation,
-    () => INITIAL_SETTINGS_STATE.showLyricTranslation
   );
 }

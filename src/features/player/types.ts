@@ -31,8 +31,6 @@ export type LyricLine = {
   text: string;
   durationMs?: number;
   words?: LyricWord[];
-  /** 该行翻译歌词（外国歌曲才有，来自 KRC 内嵌 [language:] 数据）。 */
-  translation?: string;
 };
 
 export type LyricsStatus = 'idle' | 'loading' | 'ready' | 'empty';

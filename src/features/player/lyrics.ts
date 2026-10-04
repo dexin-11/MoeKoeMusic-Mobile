@@ -1,5 +1,3 @@
-import { Buffer } from 'buffer';
-
 import { pickStringLike, pickText } from '@/lib/api-parse';
 import { artistMatches, stripEmTags } from '@/lib/format';
 import { mobileApi } from '@/lib/kugou-api';
@@ -27,83 +25,11 @@ const KRC_LINE = /<line start="(\d+)" dur="(\d+)"[^>]*>([\s\S]*?)<\/line>/g;
 const KRC_WORD = /<word start="(\d+)" dur="(\d+)"[^>]*>([\s\S]*?)<\/word>/g;
 const KRC_LINE_TEXT_TAG = /<[^>]+>/g;
 
-/** 增强 KRC（酷狗新格式，常见于外国歌）：[start,dur]<wStart,wDur,0>word… */
-const KRC_E_LINE_TAG = /^\[(-?\d+),(\d+)\]/;
-const KRC_E_WORD = /<(\d+),(\d+),\d+>([^<]*)/g;
-
-type ParsedKrc = {
-  lines: LyricLine[];
-  /** 每行在原始时间轴里的序号，用于和翻译数组对位。 */
-  rawIndexes: number[];
-  /** 原始时间轴总行数（含被跳过的空行/元数据行）。 */
-  rawCount: number;
-};
-
-/**
- * 提取 KRC 内嵌的翻译数据：[language:<base64 JSON>]，
- * JSON.content[0].lyricContent[i][0] 即第 i 行时间轴的翻译（空串表示无翻译）。
- */
-function extractKrcTranslations(content: string): string[] | null {
-  const match = content.match(/\[language:([^\]]+)\]/);
-  if (!match) {
-    return null;
-  }
-
-  try {
-    const parsed: unknown = JSON.parse(Buffer.from(match[1], 'base64').toString('utf8'));
-    const contentArr = (parsed as UnknownRecord).content;
-    const content0 = toRecord(Array.isArray(contentArr) ? contentArr[0] : null);
-    const lyricContent = content0.lyricContent;
-    if (!Array.isArray(lyricContent)) {
-      return null;
-    }
-
-    return lyricContent.map((entry) =>
-      Array.isArray(entry) && typeof entry[0] === 'string' ? entry[0] : ''
-    );
-  } catch {
-    return null;
-  }
-}
-
-/** 行序一致才对位翻译；不一致时宁可不给翻译也不错位。 */
-function applyTranslations(parsed: ParsedKrc, translations: string[] | null): LyricLine[] {
-  if (!translations || translations.length !== parsed.rawCount) {
-    return parsed.lines;
-  }
-
-  return parsed.lines.map((line, index) => {
-    const translation = translations[parsed.rawIndexes[index]]?.trim();
-    return translation ? { ...line, translation } : line;
-  });
-}
-
-/** 解析 KRC 为逐字行；自动识别旧 XML 与新增强 LRC 两种格式，并携带行级翻译。 */
+/** 解析 KRC XML 为逐字行；每个 word 时间为相对行首的偏移，换算成绝对时间。 */
 export function parseKrc(content: string): LyricLine[] {
-  const translations = extractKrcTranslations(content);
-
-  const xml = parseKrcXml(content);
-  if (xml.lines.length) {
-    return applyTranslations(xml, translations);
-  }
-
-  const enhanced = parseKrcEnhanced(content);
-  if (enhanced.lines.length) {
-    return applyTranslations(enhanced, translations);
-  }
-
-  return [];
-}
-
-/** 旧格式：XML KRC。每个 word 时间为相对行首的偏移，换算成绝对时间。 */
-function parseKrcXml(content: string): ParsedKrc {
   const lines: LyricLine[] = [];
-  const rawIndexes: number[] = [];
-  let rawCount = 0;
 
   for (const match of content.matchAll(KRC_LINE)) {
-    const rawIndex = rawCount;
-    rawCount += 1;
     const start = Number(match[1]);
     const duration = Number(match[2]);
     const body = match[3] ?? '';
@@ -127,75 +53,11 @@ function parseKrcXml(content: string): ParsedKrc {
     }
 
     lines.push({ timeMs: start, durationMs: duration, text, words });
-    rawIndexes.push(rawIndex);
   }
 
-  const deduped = lines
-    .map((line, index) => ({ line, rawIndex: rawIndexes[index] }))
-    .sort((a, b) => a.line.timeMs - b.line.timeMs)
-    .filter(
-      (item, index, list) => index === 0 || item.line.timeMs !== list[index - 1].line.timeMs
-    );
-
-  return {
-    lines: deduped.map((item) => item.line),
-    rawIndexes: deduped.map((item) => item.rawIndex),
-    rawCount,
-  };
-}
-
-/** 新格式：增强 LRC，行内嵌逐字时间轴 [start,dur]<wStart,wDur,0>word… */
-function parseKrcEnhanced(content: string): ParsedKrc {
-  const entries: { line: LyricLine; rawIndex: number }[] = [];
-  let rawCount = 0;
-
-  for (const rawLine of content.split(/\r?\n/)) {
-    const tag = KRC_E_LINE_TAG.exec(rawLine);
-    if (!tag) {
-      continue;
-    }
-
-    const rawIndex = rawCount;
-    rawCount += 1;
-    const start = Number(tag[1]);
-    const duration = Number(tag[2]);
-    const words: LyricWord[] = [];
-
-    for (const wordMatch of rawLine.matchAll(KRC_E_WORD)) {
-      const text = wordMatch[3] ?? '';
-      if (!text) {
-        continue;
-      }
-      words.push({
-        timeMs: start + Number(wordMatch[1]),
-        durationMs: Number(wordMatch[2]),
-        text,
-      });
-    }
-
-    const text = words
-      .map((word) => word.text)
-      .join('')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (!text || !words.length) {
-      continue;
-    }
-
-    entries.push({ line: { timeMs: start, durationMs: duration, text, words }, rawIndex });
-  }
-
-  const deduped = entries
-    .sort((a, b) => a.line.timeMs - b.line.timeMs)
-    .filter(
-      (item, index, list) => index === 0 || item.line.timeMs !== list[index - 1].line.timeMs
-    );
-
-  return {
-    lines: deduped.map((item) => item.line),
-    rawIndexes: deduped.map((item) => item.rawIndex),
-    rawCount,
-  };
+  return lines
+    .sort((a, b) => a.timeMs - b.timeMs)
+    .filter((line, index, list) => index === 0 || line.timeMs !== list[index - 1].timeMs);
 }
 
 const NAMED_ENTITIES: Record<string, string> = {
@@ -262,7 +124,7 @@ export async function loadLyricLines(track: PlayerTrack): Promise<LyricLine[]> {
 
   const body = toRecord(lyricResponse.body);
   const decodeContent = body.decodeContent;
-  if (typeof decodeContent === 'string') {
+  if (typeof decodeContent === 'string' && decodeContent.includes('<word ')) {
     const krcLines = parseKrc(decodeContent);
     if (krcLines.length) {
       return krcLines;
