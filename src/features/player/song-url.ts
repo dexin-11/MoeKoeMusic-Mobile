@@ -1,5 +1,5 @@
 import { pickStringLike, pickText, toRecords } from '@/lib/api-parse';
-import { normalizeDurationMs, stripEmTags, artistMatches } from '@/lib/format';
+import { normalizeDurationMs, stripEmTags } from '@/lib/format';
 import { mobileApi } from '@/lib/kugou-api';
 
 import { getPreferredQuality, type QualityId } from '@/features/settings/store';
@@ -31,9 +31,6 @@ export type ResolvedSongSource = {
   durationMs: number;
   /** 音源码率（bps）；非会员账号各档位可能都返回试听码率，用于跳过无意义的换源。 */
   bitrate?: number;
-  /** 实际取链成功所用音源标识；换源兜底后可能与曲目自带 hash 不同，供上层回写。 */
-  hash?: string;
-  albumAudioId?: string;
 };
 
 type SongUrlArgs = {
@@ -95,17 +92,10 @@ async function findSearchReplacement(track: PlayerTrack): Promise<SongUrlArgs | 
       .map((item) => ({
         hash: pickText(item.FileHash),
         title: pickText(item.OriSongName, item.SongName, item.FileName),
-        artist: pickText(item.Singername, item.SingerName),
         albumId: pickStringLike(item.AlbumID),
         albumAudioId: pickStringLike(item.MixSongID),
       }))
-      .filter(
-        (item) =>
-          item.hash &&
-          normalizeTitle(item.title) === title &&
-          // 同名资源（如同名有声书）可能排在前面，按歌手过滤避免换错音源。
-          (!track.artist || track.artist === '未知歌手' || artistMatches(item.artist, track.artist))
-      );
+      .filter((item) => item.hash && normalizeTitle(item.title) === title);
     if (!candidates.length) {
       return null;
     }
@@ -130,24 +120,26 @@ export async function resolveSongSource(
   }
 
   const quality = qualityOverride ?? getPreferredQuality();
-  const trackArgs: SongUrlArgs = {
+  let outcome = await requestSongUrl({
     hash: track.hash,
     album_id: track.albumId ?? 0,
     album_audio_id: track.albumAudioId ?? 0,
-  };
-  let outcome = await requestSongUrl({ ...trackArgs, quality });
-  let usedArgs = trackArgs;
+    quality,
+  });
 
   if (!outcome.urls.length && quality !== '128') {
     // 高清/无损大概率因会员限制取不到，先退回标准音质再试。
-    outcome = await requestSongUrl(trackArgs);
+    outcome = await requestSongUrl({
+      hash: track.hash,
+      album_id: track.albumId ?? 0,
+      album_audio_id: track.albumAudioId ?? 0,
+    });
   }
 
   if (!outcome.urls.length) {
     const replacement = await findSearchReplacement(track);
     if (replacement) {
       outcome = await requestSongUrl(replacement);
-      usedArgs = replacement;
     }
   }
 
@@ -163,8 +155,6 @@ export async function resolveSongSource(
     uri: outcome.urls[0],
     bitrate: typeof outcome.bitrate === 'number' ? outcome.bitrate : undefined,
     durationMs: normalizeDurationMs(outcome.timeLength) || track.durationMs || 0,
-    hash: usedArgs.hash,
-    albumAudioId: pickStringLike(usedArgs.album_audio_id) || undefined,
   };
 }
 
