@@ -9,7 +9,6 @@ export type StoredAppearance = {
   lyricFontSize?: unknown;
   lyricTranslationFontSize?: unknown;
   quality?: unknown;
-  animationsEnabled?: unknown;
   showLyricTranslation?: unknown;
 };
 
@@ -31,7 +30,6 @@ export async function writeStoredAppearance(value: {
   lyricFontSize: number;
   lyricTranslationFontSize: number;
   quality: string;
-  animationsEnabled: boolean;
   showLyricTranslation: boolean;
 }): Promise<void> {
   try {

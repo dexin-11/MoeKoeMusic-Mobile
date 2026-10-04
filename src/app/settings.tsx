@@ -174,7 +174,6 @@ export default function SettingsScreen() {
     lyricFontSize,
     lyricTranslationFontSize,
     quality,
-    animationsEnabled,
     showLyricTranslation,
   } = useSettings();
   const [loggedIn, setLoggedIn] = useState(() => isLoggedIn());
@@ -253,25 +252,6 @@ export default function SettingsScreen() {
                   onChange={settingsActions.setThemeMode}
                 />
               </YStack>
-              <View height={StyleSheet.hairlineWidth} backgroundColor={palette.border} />
-              <XStack alignItems="center" gap={12}>
-                <YStack flex={1} gap={2}>
-                  <Text color={palette.text} fontSize={14.5} fontWeight="600">
-                    动画效果
-                  </Text>
-                  <Text color={palette.textTertiary} fontSize={11.5} lineHeight={16}>
-                    关闭后界面过渡即时切换，滚动与按压更省电
-                  </Text>
-                </YStack>
-                <Switch
-                  size="$2"
-                  checked={animationsEnabled}
-                  onCheckedChange={(checked) => settingsActions.setAnimationsEnabled(checked)}
-                  backgroundColor={animationsEnabled ? palette.accent : palette.cardAlt}
-                  borderWidth={0}>
-                  <Switch.Thumb backgroundColor="#FFFFFF" />
-                </Switch>
-              </XStack>
               <View height={StyleSheet.hairlineWidth} backgroundColor={palette.border} />
               <YStack gap={12}>
                 <Text color={palette.textSecondary} fontSize={13} fontWeight="600">
