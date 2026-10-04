@@ -208,9 +208,11 @@ async function loadTrackAt(index: number, options?: { autoplay?: boolean }) {
     loading: true,
     error: '',
     lyrics: [],
-    lyricsStatus: 'idle',
+    // 换曲即刻后台预取歌词，与取播放地址并行；打开播放页时大概率已就绪
+    lyricsStatus: 'loading',
   });
   progressStore.setState({ positionMs: 0, durationMs: track.durationMs ?? 0, positionUpdatedAt: Date.now() });
+  loadLyricsFor(track, sequence);
 
   try {
     const source = await resolveSongSource(track);
@@ -233,6 +235,9 @@ async function loadTrackAt(index: number, options?: { autoplay?: boolean }) {
         nextQueue[index] = effectiveTrack;
       }
       playerStore.setState({ track: effectiveTrack, queue: nextQueue });
+      // 预取用的是换源前 hash，作废后按有效 hash 重取歌词
+      lyricRun += 1;
+      loadLyricsFor(effectiveTrack, sequence);
     }
 
     const player = ensureAudioPlayer();
@@ -277,22 +282,28 @@ async function loadTrackAt(index: number, options?: { autoplay?: boolean }) {
   }
 }
 
-async function loadLyricsFor(track: PlayerTrack, sequence: number) {
-  try {
-    const lines = await loadLyricLines(track);
-    if (sequence !== loadSequence) {
-      return;
-    }
+/** 歌词加载的独立代际：换源导致 hash 变化时重取，作废旧 hash 的在途结果。 */
+let lyricRun = 0;
 
-    playerStore.setState({
-      lyrics: lines,
-      lyricsStatus: lines.length ? 'ready' : 'empty',
-    });
-  } catch {
-    if (sequence === loadSequence) {
-      playerStore.setState({ lyrics: [], lyricsStatus: 'empty' });
+function loadLyricsFor(track: PlayerTrack, sequence: number) {
+  const run = lyricRun;
+  void (async () => {
+    try {
+      const lines = await loadLyricLines(track);
+      if (run !== lyricRun || sequence !== loadSequence) {
+        return;
+      }
+
+      playerStore.setState({
+        lyrics: lines,
+        lyricsStatus: lines.length ? 'ready' : 'empty',
+      });
+    } catch {
+      if (run === lyricRun && sequence === loadSequence) {
+        playerStore.setState({ lyrics: [], lyricsStatus: 'empty' });
+      }
     }
-  }
+  })();
 }
 
 async function skip(step: 1 | -1, auto = false) {
@@ -316,9 +327,8 @@ export const playerActions = {
       return;
     }
 
-    const sequence = loadSequence;
     playerStore.setState({ lyricsStatus: 'loading' });
-    await loadLyricsFor(track, sequence);
+    loadLyricsFor(track, loadSequence);
   },
 
   /**

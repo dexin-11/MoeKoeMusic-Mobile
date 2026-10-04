@@ -25,6 +25,7 @@ export default function RootLayout() {
     'MiSans-Regular': require('../../assets/fonts/MiSans-Regular.ttf'),
     'MiSans-Medium': require('../../assets/fonts/MiSans-Medium.ttf'),
     'MiSans-Semibold': require('../../assets/fonts/MiSans-Semibold.ttf'),
+    'MiSans-Bold': require('../../assets/fonts/MiSans-Bold.ttf'),
   });
 
   const navTheme = useMemo(() => {

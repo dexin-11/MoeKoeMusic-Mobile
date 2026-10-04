@@ -73,7 +73,7 @@ function applyTranslations(parsed: ParsedKrc, translations: string[] | null): Ly
   }
 
   return parsed.lines.map((line, index) => {
-    const translation = translations[parsed.rawIndexes[index]]?.trim();
+    const translation = decodeEntities(translations[parsed.rawIndexes[index]] ?? '').trim();
     return translation ? { ...line, translation } : line;
   });
 }
@@ -162,7 +162,7 @@ function parseKrcEnhanced(content: string): ParsedKrc {
     const words: LyricWord[] = [];
 
     for (const wordMatch of rawLine.matchAll(KRC_E_WORD)) {
-      const text = wordMatch[3] ?? '';
+      const text = decodeEntities(wordMatch[3] ?? '');
       if (!text) {
         continue;
       }
@@ -245,9 +245,30 @@ export function parseLrc(content: string): LyricLine[] {
 
 /**
  * 歌词两段式获取：先按 hash 搜索候选，再下载解码。
- * 优先 KRC（逐字时间轴，供卡拉OK式渲染），拿不到 KRC 或解析失败时回退行级 LRC。
+ * 优先 KRC（逐字时间轴 + 内嵌翻译），拿不到 KRC 或解析失败时回退行级 LRC。
+ * 结果按 hash 做内存缓存（含去重），切歌回来不再重复请求。
  */
-export async function loadLyricLines(track: PlayerTrack): Promise<LyricLine[]> {
+const lyricCache = new Map<string, Promise<LyricLine[]>>();
+const MAX_LYRIC_CACHE = 24;
+
+export function loadLyricLines(track: PlayerTrack): Promise<LyricLine[]> {
+  const key = track.hash;
+  const cached = lyricCache.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const pending = fetchLyricLines(track).finally(() => {
+    // 只缓存最终结果，失败允许下次重试
+    if (lyricCache.get(key) === pending && lyricCache.size > MAX_LYRIC_CACHE) {
+      lyricCache.delete(key);
+    }
+  });
+  lyricCache.set(key, pending);
+  return pending;
+}
+
+async function fetchLyricLines(track: PlayerTrack): Promise<LyricLine[]> {
   const candidate = await findLyricCandidate(track);
   if (!candidate) {
     return [];
@@ -301,16 +322,16 @@ type LyricSearchArgs = {
  * 同名资源（如同名有声书）的歌词会被混进来。
  */
 async function findLyricCandidate(track: PlayerTrack): Promise<UnknownRecord | null> {
-  if (track.albumAudioId) {
-    const candidate = pickCandidate(await searchLyricCandidates({ hash: track.hash, album_audio_id: track.albumAudioId }), track);
-    if (candidate) {
-      return candidate;
-    }
-  }
+  // 前两级（hash+album_audio_id 与仅 hash）互相独立，并行发出省一次往返
+  const [withAlbum, hashOnly] = await Promise.all([
+    track.albumAudioId
+      ? tryPickCandidate({ hash: track.hash, album_audio_id: track.albumAudioId }, track)
+      : Promise.resolve(null),
+    tryPickCandidate({ hash: track.hash }, track),
+  ]);
 
-  const hashOnly = pickCandidate(await searchLyricCandidates({ hash: track.hash }), track);
-  if (hashOnly) {
-    return hashOnly;
+  if (withAlbum || hashOnly) {
+    return withAlbum ?? hashOnly;
   }
 
   for (const replacement of await findLyricHashViaSearch(track)) {
@@ -336,6 +357,15 @@ async function findLyricCandidate(track: PlayerTrack): Promise<UnknownRecord | n
   }
 
   return null;
+}
+
+/** tryPickCandidate：搜索失败（网络/接口报错）按无候选处理，不打断兜底链。 */
+async function tryPickCandidate(args: LyricSearchArgs, track: PlayerTrack): Promise<UnknownRecord | null> {
+  try {
+    return pickCandidate(await searchLyricCandidates(args), track);
+  } catch {
+    return null;
+  }
 }
 
 /** 按歌名搜索歌曲，返回标准音源 hash 供歌词搜索兜底。 */
