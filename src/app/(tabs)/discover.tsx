@@ -49,9 +49,8 @@ const ALBUM_REGIONS: { value: AlbumRegion | 'all'; label: string }[] = [
 function useGridMetrics() {
   const { width } = useWindowDimensions();
   const contentWidth = Math.min(width, MaxContentWidth) - 32;
-  const columns = contentWidth >= 880 ? 5 : contentWidth >= 680 ? 4 : 3;
-  const cardWidth = Math.floor((contentWidth - 12 * (columns - 1)) / columns);
-  return { cardWidth, columns };
+  const cardWidth = Math.floor((contentWidth - 24) / 3);
+  return { cardWidth };
 }
 
 function PaneStatus({
@@ -143,7 +142,7 @@ function CategoryChip({
 function PlaylistPane({ bottomInset }: { bottomInset: number }) {
   const palette = usePalette();
   const router = useRouter();
-  const { cardWidth, columns } = useGridMetrics();
+  const { cardWidth } = useGridMetrics();
   const requestIdRef = useRef(0);
 
   const [categories, setCategories] = useState<DiscoverCategory[]>([]);
@@ -219,10 +218,9 @@ function PlaylistPane({ bottomInset }: { bottomInset: number }) {
 
   return (
     <FlatList
-      key={`playlist-${columns}`}
       data={loading || error ? [] : playlists}
       keyExtractor={(item) => item.id}
-      numColumns={columns}
+      numColumns={3}
       showsVerticalScrollIndicator={false}
       onEndReachedThreshold={0.5}
       onEndReached={() => {
@@ -402,7 +400,7 @@ function RankingPane({ bottomInset }: { bottomInset: number }) {
 function AlbumPane({ bottomInset }: { bottomInset: number }) {
   const palette = usePalette();
   const router = useRouter();
-  const { cardWidth, columns } = useGridMetrics();
+  const { cardWidth } = useGridMetrics();
   const [albums, setAlbums] = useState<DiscoverAlbum[]>([]);
   const [region, setRegion] = useState<AlbumRegion | 'all'>('all');
   const [loading, setLoading] = useState(true);
@@ -434,10 +432,9 @@ function AlbumPane({ bottomInset }: { bottomInset: number }) {
 
   return (
     <FlatList
-      key={`album-${columns}`}
       data={loading || error ? [] : visible}
       keyExtractor={(item) => `${item.region}-${item.id}`}
-      numColumns={columns}
+      numColumns={3}
       showsVerticalScrollIndicator={false}
       columnWrapperStyle={{ gap: 12, paddingHorizontal: 16 }}
       contentContainerStyle={{
