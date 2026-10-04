@@ -16,7 +16,6 @@ import type { LyricLine, LyricsStatus } from '@/features/player/types';
 import {
   useLyricAlign,
   useLyricFontSize,
-  useLyricTranslationFontSize,
   useShowLyricTranslation,
   type LyricAlign,
 } from '@/features/settings/store';
@@ -46,14 +45,20 @@ type LyricRowProps = {
   onSeekLine?: (line: LyricLine) => void;
 };
 
-/** 翻译行样式与主歌词行完全一致（含 includeFontPadding），只改字号字重与颜色。 */
+/** 翻译行字号随主歌词字号缩放，但设下限保证可读。 */
+function translationFontSize(fontSize: number): number {
+  return Math.max(13, Math.round(fontSize * 0.52));
+}
+
 function TranslationText({
   line,
+  active,
   align,
   fontSize,
   color,
 }: {
   line: LyricLine;
+  active: boolean;
   align: LyricAlign;
   fontSize: number;
   color: ComponentProps<typeof Text>['color'];
@@ -62,14 +67,15 @@ function TranslationText({
     return null;
   }
 
+  const size = translationFontSize(fontSize);
   return (
     <Text
       suppressHighlighting
       textAlign={align === 'center' ? 'center' : 'left'}
       color={color}
-      opacity={0.85}
-      fontSize={fontSize}
-      lineHeight={Math.round(fontSize * 1.3)}
+      opacity={active ? 0.85 : 0.45}
+      fontSize={size}
+      lineHeight={Math.round(size * 1.3)}
       fontWeight="600"
       style={styles.translationText}>
       {line.translation}
@@ -90,7 +96,6 @@ const LyricRow = memo(function LyricRow({
   onLayoutLine,
   onSeekLine,
 }: LyricRowProps) {
-  const translationFontSize = useLyricTranslationFontSize();
   return (
     <View
       onLayout={(event) => onLayoutLine(index, event.nativeEvent.layout.y)}
@@ -110,9 +115,10 @@ const LyricRow = memo(function LyricRow({
       {showTranslation ? (
         <TranslationText
           line={line}
+          active={active}
           align={align}
-          fontSize={translationFontSize}
-          color={translationColor}
+          fontSize={fontSize}
+          color={active ? activeColor : translationColor}
         />
       ) : null}
     </View>
@@ -147,7 +153,6 @@ function KaraokeLine({
   onSeekLine?: (line: LyricLine) => void;
 }) {
   const { positionMs, playing, positionUpdatedAt } = usePlayerProgress();
-  const translationFontSize = useLyricTranslationFontSize();
   const [lineWidth, setLineWidth] = useState(0);
   const fill = useSharedValue(0);
 
@@ -210,14 +215,13 @@ function KaraokeLine({
         setLineWidth(event.nativeEvent.layout.width);
       }}
       style={styles.row}>
-      {/* 底层：未唱部分。三个文字必须样式完全一致，否则 Android 字形基线错位劈开 */}
+      {/* 底层：未唱部分 */}
       <Text
         color={inactiveColor}
         fontSize={fontSize}
         lineHeight={Math.round(fontSize * 1.36)}
         fontWeight="700"
-        textAlign={align === 'center' ? 'center' : 'left'}
-        style={styles.lineText}>
+        textAlign={align === 'center' ? 'center' : 'left'}>
         {line.text}
       </Text>
       {/* 上层：已唱部分，矩形遮罩从左向右揭示 */}
@@ -231,8 +235,7 @@ function KaraokeLine({
             fontSize={fontSize}
             lineHeight={Math.round(fontSize * 1.36)}
             fontWeight="700"
-            textAlign={align === 'center' ? 'center' : 'left'}
-            style={styles.lineText}>
+            textAlign={align === 'center' ? 'center' : 'left'}>
             {line.text}
           </Text>
         </MaskedView>
@@ -240,8 +243,9 @@ function KaraokeLine({
       {showTranslation ? (
         <TranslationText
           line={line}
+          active
           align={align}
-          fontSize={translationFontSize}
+          fontSize={fontSize}
           color={translationColor}
         />
       ) : null}

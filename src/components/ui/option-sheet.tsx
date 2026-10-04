@@ -7,11 +7,9 @@ import {
   settingsActions,
   useLyricAlign,
   useLyricFontSize,
-  useLyricTranslationFontSize,
   useShowLyricTranslation,
   type LyricAlign,
   type LyricFontSize,
-  type LyricTranslationFontSize,
 } from '@/features/settings/store';
 import { usePalette } from '@/hooks/use-palette';
 
@@ -109,12 +107,6 @@ const LYRIC_FONT_OPTIONS = [
   { value: '26', label: '大' },
 ] as const;
 
-const LYRIC_TRANSLATION_FONT_OPTIONS = [
-  { value: '13', label: '小' },
-  { value: '15', label: '标准' },
-  { value: '18', label: '大' },
-] as const;
-
 /** 歌词设置弹层：对齐方式 + 字号，播放页歌词页右上角入口。 */
 export function LyricSettingsSheet({
   open,
@@ -128,7 +120,6 @@ export function LyricSettingsSheet({
   const lyricAlign = useLyricAlign();
   const lyricFontSize = useLyricFontSize();
   const showLyricTranslation = useShowLyricTranslation();
-  const lyricTranslationFontSize = useLyricTranslationFontSize();
 
   return (
     <Sheet
@@ -193,20 +184,6 @@ export function LyricSettingsSheet({
             <Switch.Thumb backgroundColor="#FFFFFF" />
           </Switch>
         </XStack>
-        {showLyricTranslation ? (
-          <YStack gap={10}>
-            <Text color={palette.textSecondary} fontSize={13} fontWeight="600">
-              翻译字号
-            </Text>
-            <SegmentedControl
-              options={LYRIC_TRANSLATION_FONT_OPTIONS}
-              value={String(lyricTranslationFontSize)}
-              onChange={(next) =>
-                settingsActions.setLyricTranslationFontSize(Number(next) as LyricTranslationFontSize)
-              }
-            />
-          </YStack>
-        ) : null}
       </Sheet.Frame>
     </Sheet>
   );

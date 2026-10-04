@@ -18,7 +18,6 @@ import {
   useSettings,
   type LyricAlign,
   type LyricFontSize,
-  type LyricTranslationFontSize,
   type QualityId,
   type ThemeMode,
 } from '@/features/settings/store';
@@ -40,12 +39,6 @@ const LYRIC_FONT_OPTIONS = [
   { value: '18', label: '小' },
   { value: '22', label: '标准' },
   { value: '26', label: '大' },
-] as const satisfies readonly { value: string; label: string }[];
-
-const LYRIC_TRANSLATION_FONT_OPTIONS = [
-  { value: '13', label: '小' },
-  { value: '15', label: '标准' },
-  { value: '18', label: '大' },
 ] as const satisfies readonly { value: string; label: string }[];
 
 const QUALITY_OPTIONS = [
@@ -167,16 +160,8 @@ export default function SettingsScreen() {
   const scheme = useEffectiveScheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const {
-    themeMode,
-    accentId,
-    lyricAlign,
-    lyricFontSize,
-    lyricTranslationFontSize,
-    quality,
-    animationsEnabled,
-    showLyricTranslation,
-  } = useSettings();
+  const { themeMode, accentId, lyricAlign, lyricFontSize, quality, animationsEnabled, showLyricTranslation } =
+    useSettings();
   const [loggedIn, setLoggedIn] = useState(() => isLoggedIn());
   const [aboutVisible, setAboutVisible] = useState(false);
   const version = Constants.expoConfig?.version ?? '';
@@ -357,23 +342,6 @@ export default function SettingsScreen() {
                   <Switch.Thumb backgroundColor="#FFFFFF" />
                 </Switch>
               </XStack>
-              {showLyricTranslation ? (
-                <>
-                  <View height={StyleSheet.hairlineWidth} backgroundColor={palette.border} />
-                  <YStack gap={10}>
-                    <Text color={palette.textSecondary} fontSize={13} fontWeight="600">
-                      翻译字号
-                    </Text>
-                    <SegmentedControl
-                      options={LYRIC_TRANSLATION_FONT_OPTIONS}
-                      value={String(lyricTranslationFontSize)}
-                      onChange={(next) =>
-                        settingsActions.setLyricTranslationFontSize(Number(next) as LyricTranslationFontSize)
-                      }
-                    />
-                  </YStack>
-                </>
-              ) : null}
             </YStack>
           </YStack>
 
