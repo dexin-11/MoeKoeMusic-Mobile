@@ -5,7 +5,6 @@ import { Text, XStack } from 'tamagui';
 
 import { useIsDark, usePalette } from '@/hooks/use-palette';
 import { useAnimationsEnabled } from '@/features/settings/store';
-import { selectionHaptic } from '@/lib/haptics';
 
 type SegmentedControlProps<T extends string> = {
   options: readonly { value: T; label: string }[];
@@ -13,9 +12,9 @@ type SegmentedControlProps<T extends string> = {
   onChange: (value: T) => void;
 };
 
-const SPRING_CONFIG = { duration: 350, dampingRatio: 1 };
+const SPRING_CONFIG = { damping: 26, stiffness: 340, mass: 1 };
 
-/** 胶囊分段切换：滑动指示条跟随选中项（Apple 双参数弹簧，无过冲；可在设置中关闭动画）。 */
+/** 胶囊分段切换：滑动指示条跟随选中项，弹簧过渡（可在设置中关闭动画）。 */
 export function SegmentedControl<T extends string>({
   options,
   value,
@@ -33,19 +32,21 @@ export function SegmentedControl<T extends string>({
   const position = useSharedValue(activeIndex);
 
   useEffect(() => {
-    if (containerWidth.get() <= 0) {
+    if (containerWidth.value <= 0) {
       // 首帧：直接就位，避免挂载时从 0 滑入
-      position.set(activeIndex);
+      position.value = activeIndex;
       return;
     }
-    position.set(animationsEnabled ? withSpring(activeIndex, SPRING_CONFIG) : activeIndex);
+    position.value = animationsEnabled
+      ? withSpring(activeIndex, SPRING_CONFIG)
+      : activeIndex;
   }, [activeIndex, animationsEnabled, containerWidth, position]);
 
   const pillStyle = useAnimatedStyle(() => {
-    const segment = containerWidth.get() / options.length;
+    const segment = containerWidth.value / options.length;
     return {
-      transform: [{ translateX: position.get() * segment }],
-      opacity: containerWidth.get() > 0 ? 1 : 0,
+      transform: [{ translateX: position.value * segment }],
+      opacity: containerWidth.value > 0 ? 1 : 0,
     };
   });
 
@@ -61,7 +62,9 @@ export function SegmentedControl<T extends string>({
         position="relative"
         height={38}
         onLayout={(event) => {
-          containerWidth.set(event.nativeEvent.layout.width);
+          // reanimated shared value 在事件回调中赋值是该库的标准用法
+          // eslint-disable-next-line react-hooks/immutability
+          containerWidth.value = event.nativeEvent.layout.width;
         }}>
         <Animated.View
           pointerEvents="none"
@@ -94,10 +97,7 @@ export function SegmentedControl<T extends string>({
               borderRadius={11}
               transition="quickest"
               pressStyle={{ opacity: 0.6 }}
-              onPress={() => {
-                selectionHaptic();
-                onChange(option.value);
-              }}>
+              onPress={() => onChange(option.value)}>
               <Text
                 color={active ? palette.text : palette.textTertiary}
                 fontSize={13.5}
