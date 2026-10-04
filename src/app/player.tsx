@@ -35,7 +35,6 @@ import {
   type QualityId,
 } from '@/features/settings/store';
 import { useIsDark, usePalette } from '@/hooks/use-palette';
-import { extractAmbientColor, mixHex, withAlpha } from '@/lib/ambient-color';
 import { formatClock, sizedImage } from '@/lib/format';
 import { shareTrack } from '@/lib/share';
 
@@ -165,7 +164,6 @@ export default function PlayerScreen() {
   const player = usePlayer();
 
   const [pageIndex, setPageIndex] = useState(0);
-  const [ambientByHash, setAmbientByHash] = useState<{ hash: string; color: string | null } | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [likeBusy, setLikeBusy] = useState(false);
@@ -178,10 +176,6 @@ export default function PlayerScreen() {
 
   const { track, playing, loading, buffering, mode, error, lyrics, lyricsStatus } = player;
   const liked = useIsLiked(track?.hash);
-  const trackHash = track?.hash ?? null;
-  const coverUrl = track?.coverUrl ?? null;
-  /** 当前这首的封面主色；取色完成前（或取不到时）为 null。 */
-  const ambient = ambientByHash && ambientByHash.hash === trackHash ? ambientByHash.color : null;
 
   /** 播放页只有歌手名没有 id：先按名字搜出歌手再跳主页。 */
   function openArtistPage() {
@@ -204,25 +198,6 @@ export default function PlayerScreen() {
       .catch(() => showToast('歌手主页打开失败，请稍后再试'))
       .finally(() => setArtistBusy(false));
   }
-
-  useEffect(() => {
-    // 换歌时按小尺寸封面重新取主色，失败保持中性配色
-    if (!trackHash) {
-      return;
-    }
-    let alive = true;
-    const small = sizedImage(coverUrl, 240) ?? coverUrl;
-    if (small) {
-      extractAmbientColor(small).then((color) => {
-        if (alive) {
-          setAmbientByHash({ hash: trackHash, color });
-        }
-      });
-    }
-    return () => {
-      alive = false;
-    };
-  }, [trackHash, coverUrl]);
 
   useEffect(() => {
     // 提前加载歌单库,让心形按钮反映真实喜欢状态
@@ -268,15 +243,6 @@ export default function PlayerScreen() {
   const artworkSize = Math.min(width - 72, compact ? 250 : 320);
   const busy = loading || buffering;
 
-  // 背景由封面主色驱动：取不到色（灰白封面/非 JPEG）时用中性灰兜底
-  const tint = ambient ?? (isDark ? '#8A8FA3' : '#B9BECC');
-  const scrimTop = isDark
-    ? withAlpha(mixHex(tint, '#000000', 0.45), 0.5)
-    : withAlpha('#FFFFFF', 0.55);
-  const scrimBottom = isDark
-    ? withAlpha(mixHex(tint, '#0E0F16', 0.78), 0.94)
-    : withAlpha(mixHex(tint, '#FFFFFF', 0.78), 0.92);
-
   function handlePagerScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width);
     if (nextIndex !== pageIndex) {
@@ -319,8 +285,7 @@ export default function PlayerScreen() {
 
   return (
     <View flex={1} backgroundColor={palette.playerBottom}>
-      {/* Apple Music 式背景：封面大图高斯模糊 + 按封面主色取的轻遮罩，
-          顶部多透出封面色、底部收进主题色保证控件可读 */}
+      {/* Apple Music 式背景：封面大图高斯模糊 + 顶部浅色到主题底的渐变遮罩 */}
       {track.coverUrl ? (
         <Image
           source={{ uri: sizedImage(track.coverUrl, 480) ?? track.coverUrl }}
@@ -331,9 +296,14 @@ export default function PlayerScreen() {
         />
       ) : null}
       <LinearGradient
-        colors={[scrimTop, scrimBottom]}
+        colors={[isDark ? 'rgba(14, 15, 22, 0.82)' : 'rgba(255, 255, 255, 0.86)', palette.playerBottom + 'F2']}
         locations={[0, 0.55]}
         style={StyleSheet.absoluteFill}
+      />
+      <LinearGradient
+        colors={['transparent', palette.playerBottom]}
+        locations={[0, 1]}
+        style={[StyleSheet.absoluteFill, { height: '100%' }]}
       />
 
       <YStack flex={1} paddingTop={insets.top + 6} paddingBottom={Math.max(insets.bottom, 14) + 20}>
