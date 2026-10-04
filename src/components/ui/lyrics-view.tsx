@@ -1,4 +1,3 @@
-import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useEffect, useRef, useState, type ComponentProps } from 'react';
 import { ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
@@ -14,7 +13,8 @@ import {
   useShowLyricTranslation,
   type LyricAlign,
 } from '@/features/settings/store';
-import { usePalette } from '@/hooks/use-palette';
+import { useIsDark, usePalette } from '@/hooks/use-palette';
+import { BlurViewModule } from '@/lib/blur';
 
 type LyricsViewProps = {
   lines: LyricLine[];
@@ -23,6 +23,8 @@ type LyricsViewProps = {
 };
 
 const RESUME_AUTO_SCROLL_MS = 3500;
+/** 上下毛玻璃/渐隐边缘占视口高度的比例。 */
+const EDGE_FRACTION = 0.14;
 
 type LyricRowProps = {
   line: LyricLine;
@@ -60,7 +62,6 @@ function TranslationText({
       opacity={0.85}
       fontSize={fontSize}
       lineHeight={Math.round(fontSize * 1.3)}
-      fontWeight="600"
       style={styles.translationText}>
       {line.translation}
     </Text>
@@ -92,7 +93,6 @@ const LyricRow = memo(function LyricRow({
         opacity={active ? 1 : 0.45}
         fontSize={fontSize}
         lineHeight={Math.round(fontSize * 1.36)}
-        fontWeight="700"
         style={styles.lineText}>
         {line.text}
       </Text>
@@ -109,6 +109,7 @@ const LyricRow = memo(function LyricRow({
 
 export function LyricsView({ lines, status, onSeekLine }: LyricsViewProps) {
   const palette = usePalette();
+  const isDark = useIsDark();
   const lyricAlign = useLyricAlign();
   const lyricFontSize = useLyricFontSize();
   const showTranslation = useShowLyricTranslation();
@@ -119,6 +120,7 @@ export function LyricsView({ lines, status, onSeekLine }: LyricsViewProps) {
   const activeIndex = usePlayerProgressSelector(({ positionMs }) =>
     findActiveLyricIndex(lines, positionMs + 240)
   );
+  const edgeHeight = viewportHeight ? Math.round(viewportHeight * EDGE_FRACTION) : 90;
 
   const handleLayoutLine = useCallback((index: number, offset: number) => {
     lineOffsets.current[index] = offset;
@@ -169,16 +171,7 @@ export function LyricsView({ lines, status, onSeekLine }: LyricsViewProps) {
   }
 
   return (
-    <MaskedView
-      style={{ flex: 1 }}
-      androidRenderingMode="hardware"
-      maskElement={
-        <LinearGradient
-          colors={['transparent', 'black', 'black', 'transparent']}
-          locations={[0, 0.14, 0.84, 1]}
-          style={{ flex: 1 }}
-        />
-      }>
+    <View style={{ flex: 1 }}>
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
@@ -207,7 +200,40 @@ export function LyricsView({ lines, status, onSeekLine }: LyricsViewProps) {
           />
         ))}
       </ScrollView>
-    </MaskedView>
+
+      {/* 上下毛玻璃边缘：歌词从模糊层下滑过（expo-blur 不可用时降级为渐隐） */}
+      {BlurViewModule ? (
+        <>
+          <BlurViewModule.BlurView
+            intensity={isDark ? 40 : 60}
+            tint={isDark ? 'dark' : 'light'}
+            experimentalBlurMethod="dimezis"
+            pointerEvents="none"
+            style={[styles.edge, { top: 0, height: edgeHeight }]}
+          />
+          <BlurViewModule.BlurView
+            intensity={isDark ? 40 : 60}
+            tint={isDark ? 'dark' : 'light'}
+            experimentalBlurMethod="dimezis"
+            pointerEvents="none"
+            style={[styles.edge, { bottom: 0, height: edgeHeight }]}
+          />
+        </>
+      ) : (
+        <>
+          <LinearGradient
+            pointerEvents="none"
+            colors={[palette.background, 'transparent']}
+            style={[styles.edge, { top: 0, height: edgeHeight }]}
+          />
+          <LinearGradient
+            pointerEvents="none"
+            colors={['transparent', palette.background]}
+            style={[styles.edge, { bottom: 0, height: edgeHeight }]}
+          />
+        </>
+      )}
+    </View>
   );
 }
 
@@ -217,9 +243,16 @@ const styles = StyleSheet.create({
   },
   lineText: {
     includeFontPadding: false,
+    fontFamily: 'MiSans-Semibold',
   },
   translationText: {
     includeFontPadding: false,
     marginTop: 5,
+    fontFamily: 'MiSans-Medium',
+  },
+  edge: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
   },
 });
