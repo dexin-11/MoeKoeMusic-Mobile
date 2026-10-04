@@ -1,3 +1,4 @@
+import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useEffect, useRef, useState, type ComponentProps } from 'react';
 import { ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
@@ -22,8 +23,6 @@ type LyricsViewProps = {
 };
 
 const RESUME_AUTO_SCROLL_MS = 3500;
-/** 上下毛玻璃/渐隐边缘占视口高度的比例。 */
-const EDGE_FRACTION = 0.14;
 
 type LyricRowProps = {
   line: LyricLine;
@@ -118,7 +117,6 @@ export function LyricsView({ lines, status, onSeekLine }: LyricsViewProps) {
   const activeIndex = usePlayerProgressSelector(({ positionMs }) =>
     findActiveLyricIndex(lines, positionMs + 240)
   );
-  const edgeHeight = viewportHeight ? Math.round(viewportHeight * EDGE_FRACTION) : 90;
 
   const handleLayoutLine = useCallback((index: number, offset: number) => {
     lineOffsets.current[index] = offset;
@@ -169,7 +167,18 @@ export function LyricsView({ lines, status, onSeekLine }: LyricsViewProps) {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    // alpha 遮罩让歌词本身在上下边缘淡出，透出后面的动态取色背景，
+    // 因此不能用任何实色渐变条（背景色会与封面取色背景冲突）
+    <MaskedView
+      style={{ flex: 1 }}
+      androidRenderingMode="hardware"
+      maskElement={
+        <LinearGradient
+          colors={['transparent', 'black', 'black', 'transparent']}
+          locations={[0, 0.14, 0.84, 1]}
+          style={{ flex: 1 }}
+        />
+      }>
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
@@ -198,19 +207,7 @@ export function LyricsView({ lines, status, onSeekLine }: LyricsViewProps) {
           />
         ))}
       </ScrollView>
-
-      {/* 上下边缘：背景色渐隐，歌词从边缘淡出 */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={[palette.background, 'transparent']}
-        style={[styles.edge, { top: 0, height: edgeHeight }]}
-      />
-      <LinearGradient
-        pointerEvents="none"
-        colors={['transparent', palette.background]}
-        style={[styles.edge, { bottom: 0, height: edgeHeight }]}
-      />
-    </View>
+    </MaskedView>
   );
 }
 
@@ -226,10 +223,5 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
     marginTop: 5,
     fontFamily: 'MiSans-Medium',
-  },
-  edge: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
   },
 });
