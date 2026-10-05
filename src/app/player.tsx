@@ -54,27 +54,47 @@ const QUALITY_BADGE: Record<QualityId, string> = {
   flac: 'SQ',
 };
 
-/** 主色遮罩的交叉淡入时长：慢一点才优雅，快了就和硬切没区别。 */
-const AMBIENT_FADE_MS = 1200;
+/** 整层背景的交叉淡入时长：慢一点才优雅，快了就和硬切没区别。 */
+const AMBIENT_FADE_MS = 1100;
+
+type AmbientLayer = {
+  key: string;
+  tint: string;
+  coverUrl: string | null;
+  id: number;
+};
 
 /**
- * 按封面主色着色的背景遮罩。主色变化（首播取色完成/切歌）时不硬切，
- * 而是新颜色一层盖在旧颜色上慢慢淡入，淡完再移除旧层。
+ * 播放页整体背景（底色 + 模糊封面 + 主色遮罩）。取色完成或切歌时不硬切：
+ * 新背景作为一整层盖在旧层上慢慢淡入，淡完移除旧层。
+ * 每层都以不透明底色打底——两个不透明背景交叉淡入的中间帧才是干净的线性混合，
+ * 半透明层叠半透明层会中途变深（旧版颜色"深-浅-深"抖动的根因）。
  */
-function AmbientScrim({ tint, isDark }: { tint: string; isDark: boolean }) {
-  const [layers, setLayers] = useState<{ tint: string; id: number }[]>([
-    { tint, id: 0 },
+function AmbientBackground({
+  tint,
+  coverUrl,
+  isDark,
+  baseColor,
+}: {
+  tint: string;
+  coverUrl: string | null;
+  isDark: boolean;
+  baseColor: string;
+}) {
+  const [layers, setLayers] = useState<AmbientLayer[]>([
+    { key: `${tint}-${coverUrl ?? ''}`, tint, coverUrl, id: 0 },
   ]);
 
   useEffect(() => {
+    const key = `${tint}-${coverUrl ?? ''}`;
     setLayers((current) => {
-      if (current[current.length - 1]!.tint === tint) {
+      if (current[current.length - 1]!.key === key) {
         return current;
       }
-      // 只保留紧邻的旧层，快速连续切歌也不会叠出一摞渐变
-      return [...current.slice(-1), { tint, id: current[current.length - 1]!.id + 1 }];
+      // 只保留紧邻的旧层：快速连续切歌也不会叠出一摞渐变
+      return [...current.slice(-1), { key, tint, coverUrl, id: current[current.length - 1]!.id + 1 }];
     });
-  }, [tint]);
+  }, [tint, coverUrl]);
 
   useEffect(() => {
     if (layers.length < 2) {
@@ -82,7 +102,7 @@ function AmbientScrim({ tint, isDark }: { tint: string; isDark: boolean }) {
     }
     const timer = setTimeout(() => {
       setLayers((current) => current.slice(-1));
-    }, AMBIENT_FADE_MS + 120);
+    }, AMBIENT_FADE_MS + 150);
     return () => clearTimeout(timer);
   }, [layers]);
 
@@ -96,7 +116,16 @@ function AmbientScrim({ tint, isDark }: { tint: string; isDark: boolean }) {
               ? undefined
               : FadeIn.duration(AMBIENT_FADE_MS).easing(Easing.inOut(Easing.cubic))
           }
-          style={StyleSheet.absoluteFill}>
+          style={[StyleSheet.absoluteFill, { backgroundColor: baseColor }]}>
+          {layer.coverUrl ? (
+            <Image
+              source={{ uri: sizedImage(layer.coverUrl, 480) ?? layer.coverUrl }}
+              style={StyleSheet.absoluteFill}
+              blurRadius={50}
+              contentFit="cover"
+              transition={0}
+            />
+          ) : null}
           <LinearGradient
             colors={[
               isDark
@@ -245,8 +274,6 @@ export default function PlayerScreen() {
   const liked = useIsLiked(track?.hash);
   const trackHash = track?.hash ?? null;
   const coverUrl = track?.coverUrl ?? null;
-  /** 当前这首的封面主色；取色完成前（或取不到时）为 null。 */
-  const ambient = ambientByHash && ambientByHash.hash === trackHash ? ambientByHash.color : null;
 
   const compact = height < 700;
   /** 平板用左右分栏：封面与控制居左、歌词常驻右侧；手机仍是封面/歌词翻页。 */
@@ -347,8 +374,17 @@ export default function PlayerScreen() {
       .finally(() => setLikeBusy(false));
   }
 
-  // 背景由封面主色驱动：取不到色（灰白封面/非 JPEG）时用中性灰兜底
-  const tint = ambient ?? (isDark ? '#8A8FA3' : '#B9BECC');
+  // 背景由封面主色驱动。新歌取色完成前沿用上一首的主色（而不是先跳到中性灰），
+  // 这样取色完成后只发生一次背景渐变，不会"旧色→灰→新色"抖两次。
+  // 取色完成但确实无色（灰白封面/非 JPEG）才落到中性灰。
+  const neutralTint = isDark ? '#8A8FA3' : '#B9BECC';
+  const [tint, setTint] = useState(neutralTint);
+  useEffect(() => {
+    if (ambientByHash && ambientByHash.hash === trackHash) {
+      setTint(ambientByHash.color ?? neutralTint);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ambientByHash, trackHash]);
 
   function handlePagerScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width);
@@ -629,17 +665,13 @@ export default function PlayerScreen() {
   return (
     <View flex={1} backgroundColor={palette.playerBottom}>
       {/* Apple Music 式背景：封面大图高斯模糊 + 按封面主色取的轻遮罩，
-          顶部多透出封面色、底部收进主题色保证控件可读 */}
-      {track.coverUrl ? (
-        <Image
-          source={{ uri: sizedImage(track.coverUrl, 480) ?? track.coverUrl }}
-          style={StyleSheet.absoluteFill}
-          blurRadius={50}
-          contentFit="cover"
-          transition={400}
-        />
-      ) : null}
-      <AmbientScrim tint={tint} isDark={isDark} />
+          整层作为不透明背景交叉淡入，顶部多透出封面色、底部收进主题色保证控件可读 */}
+      <AmbientBackground
+        tint={tint}
+        coverUrl={track.coverUrl}
+        isDark={isDark}
+        baseColor={palette.playerBottom}
+      />
 
       <YStack flex={1} paddingTop={insets.top + 6} paddingBottom={Math.max(insets.bottom, 14) + 20}>
         {/* 顶栏：分栏时歌词常驻，设置与收起按钮一起靠右 */}
