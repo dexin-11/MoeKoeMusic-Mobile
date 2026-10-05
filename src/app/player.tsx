@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   InteractionManager,
+  TouchableOpacity,
   useWindowDimensions,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -34,6 +35,7 @@ import {
   type LyricFontSize,
   type QualityId,
 } from '@/features/settings/store';
+import { useIsTablet } from '@/hooks/use-is-tablet';
 import { useIsDark, usePalette } from '@/hooks/use-palette';
 import { extractAmbientColor, mixHex, withAlpha } from '@/lib/ambient-color';
 import { formatClock, sizedImage } from '@/lib/format';
@@ -162,6 +164,7 @@ export default function PlayerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  const isTablet = useIsTablet();
   const player = usePlayer();
 
   const [pageIndex, setPageIndex] = useState(0);
@@ -182,6 +185,17 @@ export default function PlayerScreen() {
   const coverUrl = track?.coverUrl ?? null;
   /** 当前这首的封面主色；取色完成前（或取不到时）为 null。 */
   const ambient = ambientByHash && ambientByHash.hash === trackHash ? ambientByHash.color : null;
+
+  const compact = height < 700;
+  /** 平板用左右分栏：封面与控制居左、歌词常驻右侧；手机仍是封面/歌词翻页。 */
+  const splitLeftWidth = Math.round(Math.min(Math.max(width * 0.4, 300), 620));
+  const artworkSize = isTablet
+    ? Math.min(
+        420,
+        Math.max(180, Math.min(splitLeftWidth - 80, height - insets.top - insets.bottom - 400)),
+      )
+    : Math.min(width - 72, compact ? 250 : 320);
+  const busy = loading || buffering;
 
   /** 播放页只有歌手名没有 id：先按名字搜出歌手再跳主页。 */
   function openArtistPage() {
@@ -235,10 +249,11 @@ export default function PlayerScreen() {
   }, []);
 
   useEffect(() => {
-    if (pageIndex === 1) {
+    // 分栏布局歌词常驻右侧，进页面就取词；翻页布局要等滑到歌词页
+    if (isTablet || pageIndex === 1) {
       void playerActions.loadLyrics();
     }
-  }, [pageIndex, track?.hash]);
+  }, [isTablet, pageIndex, track?.hash]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -263,10 +278,6 @@ export default function PlayerScreen() {
       })
       .finally(() => setLikeBusy(false));
   }
-
-  const compact = height < 700;
-  const artworkSize = Math.min(width - 72, compact ? 250 : 320);
-  const busy = loading || buffering;
 
   // 背景由封面主色驱动：取不到色（灰白封面/非 JPEG）时用中性灰兜底
   const tint = ambient ?? (isDark ? '#8A8FA3' : '#B9BECC');
@@ -317,6 +328,242 @@ export default function PlayerScreen() {
     );
   }
 
+  const collapseButton = (
+    <XStack
+      width={40}
+      height={40}
+      borderRadius={20}
+      alignItems="center"
+      justifyContent="center"
+      transition="quickest"
+      pressStyle={{ opacity: 0.6, scale: 0.92 }}
+      onPress={() => router.dismiss()}>
+      <Ionicons name="chevron-down" size={24} color={palette.textSecondary} />
+    </XStack>
+  );
+
+  const lyricSettingsButton = (
+    <XStack
+      width={40}
+      height={40}
+      borderRadius={20}
+      alignItems="center"
+      justifyContent="center"
+      transition="quickest"
+      pressStyle={{ opacity: 0.6, scale: 0.92 }}
+      onPress={() => setLyricSettingsOpen(true)}>
+      <Ionicons name="options-outline" size={21} color={palette.textSecondary} />
+    </XStack>
+  );
+
+  const pagerDots = (
+    <YStack alignItems="center" gap={2}>
+      <Text color={palette.textTertiary} fontSize={11} letterSpacing={1.2}>
+        正在播放
+      </Text>
+      <XStack gap={5} alignItems="center">
+        {[0, 1].map((dot) => (
+          <View
+            key={dot}
+            width={dot === pageIndex ? 14 : 5}
+            height={5}
+            borderRadius={999}
+            backgroundColor={dot === pageIndex ? palette.accent : palette.textTertiary}
+            opacity={dot === pageIndex ? 1 : 0.4}
+            transition="quick"
+          />
+        ))}
+      </XStack>
+    </YStack>
+  );
+
+  const artworkBlock = <ArtworkCard coverUrl={track.coverUrl} playing={playing} size={artworkSize} />;
+
+  const metaBlock = (
+    <YStack alignItems="center" gap={7} paddingHorizontal={isTablet ? 8 : 40} maxWidth={560}>
+      <Text
+        color={palette.text}
+        fontSize={compact ? 20 : 23}
+        fontWeight="800"
+        textAlign="center"
+        numberOfLines={1}>
+        {track.title}
+      </Text>
+      <Text
+        color={palette.textSecondary}
+        fontSize={15}
+        numberOfLines={1}
+        transition="quickest"
+        pressStyle={{ opacity: 0.6 }}
+        onPress={openArtistPage}>
+        {track.artist || '未知歌手'}
+      </Text>
+      {error ? (
+        <XStack
+          alignItems="center"
+          gap={6}
+          marginTop={4}
+          paddingHorizontal={13}
+          paddingVertical={7}
+          borderRadius={999}
+          backgroundColor={palette.dangerSoft}>
+          <Ionicons name="alert-circle" size={13} color={palette.danger} />
+          <Text color={palette.danger} fontSize={12}>
+            {error}
+          </Text>
+        </XStack>
+      ) : null}
+    </YStack>
+  );
+
+  const lyricsBlock = lyricsMounted ? (
+    <LyricsView lines={lyrics} status={lyricsStatus} onSeekLine={handleSeekLine} />
+  ) : null;
+
+  const controlsBlock = (
+    <YStack
+      width="100%"
+      maxWidth={isTablet ? splitLeftWidth - 40 : 620}
+      paddingHorizontal={isTablet ? 0 : 28}
+      gap={compact ? 14 : 20}
+      alignSelf="center">
+      <XStack alignItems="center" justifyContent="center" gap={46}>
+        <XStack
+          width={40}
+          height={40}
+          alignItems="center"
+          justifyContent="center"
+          opacity={likeBusy ? 0.5 : 1}
+          transition="quickest"
+          pressStyle={{ opacity: 0.55, scale: 0.88 }}
+          onPress={handleToggleLike}>
+          <Ionicons
+            name={liked ? 'heart' : 'heart-outline'}
+            size={24}
+            color={liked ? palette.accent : palette.textSecondary}
+          />
+        </XStack>
+        <XStack
+          width={40}
+          height={40}
+          alignItems="center"
+          justifyContent="center"
+          transition="quickest"
+          pressStyle={{ opacity: 0.55, scale: 0.88 }}
+          onPress={() => setActionsOpen(true)}>
+          <MaterialCommunityIcons name="playlist-plus" size={24} color={palette.textSecondary} />
+        </XStack>
+        <XStack
+          width={40}
+          height={40}
+          alignItems="center"
+          justifyContent="center"
+          transition="quickest"
+          pressStyle={{ opacity: 0.55, scale: 0.88 }}
+          onPress={() => setQualityOpen(true)}>
+          <View
+            width={30}
+            height={22}
+            borderRadius={6}
+            borderWidth={1.5}
+            borderColor={quality === 'flac' ? palette.accent : palette.textSecondary}
+            alignItems="center"
+            justifyContent="center">
+            <Text
+              fontSize={9.5}
+              fontWeight="800"
+              letterSpacing={0.5}
+              color={quality === 'flac' ? palette.accent : palette.textSecondary}>
+              {QUALITY_BADGE[quality]}
+            </Text>
+          </View>
+        </XStack>
+        <XStack
+          width={40}
+          height={40}
+          alignItems="center"
+          justifyContent="center"
+          transition="quickest"
+          pressStyle={{ opacity: 0.55, scale: 0.88 }}
+          onPress={() => {
+            if (track) {
+              void shareTrack(track);
+            }
+          }}>
+          <Ionicons name="share-social-outline" size={22} color={palette.textSecondary} />
+        </XStack>
+      </XStack>
+
+      <PlaybackProgress />
+
+      <XStack alignItems="center" justifyContent="space-between" paddingHorizontal={8}>
+        <XStack
+          width={44}
+          height={44}
+          alignItems="center"
+          justifyContent="center"
+          transition="quickest"
+          pressStyle={{ opacity: 0.55, scale: 0.9 }}
+          onPress={() => playerActions.cycleMode()}>
+          <MaterialCommunityIcons name={MODE_ICON[mode]} size={22} color={palette.textSecondary} />
+        </XStack>
+
+        <XStack
+          width={56}
+          height={56}
+          alignItems="center"
+          justifyContent="center"
+          transition="quickest"
+          pressStyle={{ opacity: 0.55, scale: 0.88 }}
+          onPress={() => playerActions.previous()}>
+          <Ionicons name="play-skip-back" size={32} color={palette.text} />
+        </XStack>
+
+        <XStack
+          width={72}
+          height={72}
+          alignItems="center"
+          justifyContent="center"
+          transition="quickest"
+          pressStyle={{ scale: 0.9, opacity: 0.75 }}
+          onPress={() => playerActions.toggle()}>
+          {busy ? (
+            <Spinner size="large" color={palette.text} />
+          ) : (
+            <Ionicons
+              name={playing ? 'pause' : 'play'}
+              size={40}
+              color={palette.text}
+              style={playing ? undefined : { marginLeft: 4 }}
+            />
+          )}
+        </XStack>
+
+        <XStack
+          width={56}
+          height={56}
+          alignItems="center"
+          justifyContent="center"
+          transition="quickest"
+          pressStyle={{ opacity: 0.55, scale: 0.88 }}
+          onPress={() => playerActions.next()}>
+          <Ionicons name="play-skip-forward" size={32} color={palette.text} />
+        </XStack>
+
+        <XStack
+          width={44}
+          height={44}
+          alignItems="center"
+          justifyContent="center"
+          transition="quickest"
+          pressStyle={{ opacity: 0.55, scale: 0.9 }}
+          onPress={() => setQueueOpen(true)}>
+          <MaterialCommunityIcons name="playlist-music" size={22} color={palette.textSecondary} />
+        </XStack>
+      </XStack>
+    </YStack>
+  );
+
   return (
     <View flex={1} backgroundColor={palette.playerBottom}>
       {/* Apple Music 式背景：封面大图高斯模糊 + 按封面主色取的轻遮罩，
@@ -337,249 +584,69 @@ export default function PlayerScreen() {
       />
 
       <YStack flex={1} paddingTop={insets.top + 6} paddingBottom={Math.max(insets.bottom, 14) + 20}>
-        {/* 顶栏 */}
-        <XStack zIndex={1} alignItems="center" justifyContent="space-between" paddingHorizontal={18}>
-          <XStack
-            width={40}
-            height={40}
-            borderRadius={20}
-            alignItems="center"
-            justifyContent="center"
-            transition="quickest"
-            pressStyle={{ opacity: 0.6, scale: 0.92 }}
-            onPress={() => router.dismiss()}>
-            <Ionicons name="chevron-down" size={24} color={palette.textSecondary} />
-          </XStack>
-          <YStack alignItems="center" gap={2}>
-            <Text color={palette.textTertiary} fontSize={11} letterSpacing={1.2}>
-              正在播放
-            </Text>
-            <XStack gap={5} alignItems="center">
-              {[0, 1].map((dot) => (
-                <View
-                  key={dot}
-                  width={dot === pageIndex ? 14 : 5}
-                  height={5}
-                  borderRadius={999}
-                  backgroundColor={dot === pageIndex ? palette.accent : palette.textTertiary}
-                  opacity={dot === pageIndex ? 1 : 0.4}
-                  transition="quick"
-                />
-              ))}
-            </XStack>
-          </YStack>
-          {pageIndex === 1 ? (
-            <XStack
-              width={40}
-              height={40}
-              borderRadius={20}
-              alignItems="center"
-              justifyContent="center"
-              transition="quickest"
-              pressStyle={{ opacity: 0.6, scale: 0.92 }}
-              onPress={() => setLyricSettingsOpen(true)}>
-              <Ionicons name="options-outline" size={21} color={palette.textSecondary} />
-            </XStack>
-          ) : (
-            <View width={40} height={40} />
-          )}
+        {/* 顶栏：分栏时歌词常驻，设置与收起按钮一起靠右 */}
+        <XStack
+          zIndex={1}
+          alignItems="center"
+          gap={4}
+          paddingHorizontal={18}
+          justifyContent={isTablet ? 'flex-end' : 'space-between'}>
+          {isTablet ? null : collapseButton}
+          {isTablet ? null : pagerDots}
+          {isTablet || pageIndex === 1 ? lyricSettingsButton : <View width={40} height={40} />}
+          {isTablet ? collapseButton : null}
         </XStack>
 
-        {/* 封面 / 歌词 双页 */}
-        <ScrollView
-          ref={pagerRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={handlePagerScroll}
-          style={{ flex: 1 }}>
-          <YStack width={width} alignItems="center" justifyContent="center" gap={compact ? 22 : 34}>
-            <ArtworkCard coverUrl={track.coverUrl} playing={playing} size={artworkSize} />
-
-            <YStack alignItems="center" gap={7} paddingHorizontal={40} maxWidth={560}>
-              <Text
-                color={palette.text}
-                fontSize={compact ? 20 : 23}
-                fontWeight="800"
-                textAlign="center"
-                numberOfLines={1}>
-                {track.title}
-              </Text>
-              <Text
-                color={palette.textSecondary}
-                fontSize={15}
-                numberOfLines={1}
-                transition="quickest"
-                pressStyle={{ opacity: 0.6 }}
-                onPress={openArtistPage}>
-                {track.artist || '未知歌手'}
-              </Text>
-              {error ? (
-                <XStack
-                  alignItems="center"
-                  gap={6}
-                  marginTop={4}
-                  paddingHorizontal={13}
-                  paddingVertical={7}
-                  borderRadius={999}
-                  backgroundColor={palette.dangerSoft}>
-                  <Ionicons name="alert-circle" size={13} color={palette.danger} />
-                  <Text color={palette.danger} fontSize={12}>
-                    {error}
-                  </Text>
-                </XStack>
-              ) : null}
+        {isTablet ? (
+          <XStack
+            flex={1}
+            gap={10}
+            paddingLeft={insets.left + 14}
+            paddingRight={insets.right + 14}>
+            <YStack width={splitLeftWidth} alignItems="center" justifyContent="center" gap={24}>
+              {artworkBlock}
+              {metaBlock}
+              {controlsBlock}
             </YStack>
-          </YStack>
-
-          <YStack width={width} paddingTop={8} position="relative">
-            {lyricsMounted ? (
-              <LyricsView
-                lines={lyrics}
-                status={lyricsStatus}
-                onSeekLine={handleSeekLine}
-              />
-            ) : null}
-          </YStack>
-        </ScrollView>
-
-        {/* 进度与控制 */}
-        <YStack paddingHorizontal={28} gap={compact ? 14 : 20} maxWidth={620} width="100%" alignSelf="center">
-          <XStack alignItems="center" justifyContent="center" gap={46}>
-            <XStack
-              width={40}
-              height={40}
-              alignItems="center"
-              justifyContent="center"
-              opacity={likeBusy ? 0.5 : 1}
-              transition="quickest"
-              pressStyle={{ opacity: 0.55, scale: 0.88 }}
-              onPress={handleToggleLike}>
-              <Ionicons
-                name={liked ? 'heart' : 'heart-outline'}
-                size={24}
-                color={liked ? palette.accent : palette.textSecondary}
-              />
-            </XStack>
-            <XStack
-              width={40}
-              height={40}
-              alignItems="center"
-              justifyContent="center"
-              transition="quickest"
-              pressStyle={{ opacity: 0.55, scale: 0.88 }}
-              onPress={() => setActionsOpen(true)}>
-              <MaterialCommunityIcons name="playlist-plus" size={24} color={palette.textSecondary} />
-            </XStack>
-            <XStack
-              width={40}
-              height={40}
-              alignItems="center"
-              justifyContent="center"
-              transition="quickest"
-              pressStyle={{ opacity: 0.55, scale: 0.88 }}
-              onPress={() => setQualityOpen(true)}>
-              <View
-                width={30}
-                height={22}
-                borderRadius={6}
-                borderWidth={1.5}
-                borderColor={quality === 'flac' ? palette.accent : palette.textSecondary}
-                alignItems="center"
-                justifyContent="center">
-                <Text
-                  fontSize={9.5}
-                  fontWeight="800"
-                  letterSpacing={0.5}
-                  color={quality === 'flac' ? palette.accent : palette.textSecondary}>
-                  {QUALITY_BADGE[quality]}
-                </Text>
-              </View>
-            </XStack>
-            <XStack
-              width={40}
-              height={40}
-              alignItems="center"
-              justifyContent="center"
-              transition="quickest"
-              pressStyle={{ opacity: 0.55, scale: 0.88 }}
-              onPress={() => {
-                if (track) {
-                  void shareTrack(track);
-                }
-              }}>
-              <Ionicons name="share-social-outline" size={22} color={palette.textSecondary} />
-            </XStack>
+            <YStack flex={1} paddingTop={4}>
+              {lyricsBlock}
+            </YStack>
           </XStack>
+        ) : (
+          <>
+            {/* 封面 / 歌词 双页 */}
+            <ScrollView
+              ref={pagerRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={handlePagerScroll}
+              style={{ flex: 1 }}>
+              <YStack width={width} alignItems="center" justifyContent="center" gap={compact ? 22 : 34}>
+                {/* 封面页没有可点元素，点空白/封面直接翻到歌词页 */}
+                <TouchableOpacity
+                  activeOpacity={1}
+                  style={StyleSheet.absoluteFill}
+                  onPress={() => {
+                    // Android 的程序化 scrollTo 不触发 onMomentumScrollEnd，页码要同步手动更新
+                    setPageIndex(1);
+                    pagerRef.current?.scrollTo({ x: width, animated: true });
+                  }}>
+                  <YStack flex={1} alignItems="center" justifyContent="center" gap={compact ? 22 : 34}>
+                    {artworkBlock}
+                    {metaBlock}
+                  </YStack>
+                </TouchableOpacity>
+              </YStack>
 
-          <PlaybackProgress />
+              <YStack width={width} paddingTop={8} position="relative">
+                {lyricsBlock}
+              </YStack>
+            </ScrollView>
 
-          <XStack alignItems="center" justifyContent="space-between" paddingHorizontal={8}>
-            <XStack
-              width={44}
-              height={44}
-              alignItems="center"
-              justifyContent="center"
-              transition="quickest"
-              pressStyle={{ opacity: 0.55, scale: 0.9 }}
-              onPress={() => playerActions.cycleMode()}>
-              <MaterialCommunityIcons name={MODE_ICON[mode]} size={22} color={palette.textSecondary} />
-            </XStack>
-
-            <XStack
-              width={56}
-              height={56}
-              alignItems="center"
-              justifyContent="center"
-              transition="quickest"
-              pressStyle={{ opacity: 0.55, scale: 0.88 }}
-              onPress={() => playerActions.previous()}>
-              <Ionicons name="play-skip-back" size={32} color={palette.text} />
-            </XStack>
-
-            <XStack
-              width={72}
-              height={72}
-              alignItems="center"
-              justifyContent="center"
-              transition="quickest"
-              pressStyle={{ scale: 0.9, opacity: 0.75 }}
-              onPress={() => playerActions.toggle()}>
-              {busy ? (
-                <Spinner size="large" color={palette.text} />
-              ) : (
-                <Ionicons
-                  name={playing ? 'pause' : 'play'}
-                  size={40}
-                  color={palette.text}
-                  style={playing ? undefined : { marginLeft: 4 }}
-                />
-              )}
-            </XStack>
-
-            <XStack
-              width={56}
-              height={56}
-              alignItems="center"
-              justifyContent="center"
-              transition="quickest"
-              pressStyle={{ opacity: 0.55, scale: 0.88 }}
-              onPress={() => playerActions.next()}>
-              <Ionicons name="play-skip-forward" size={32} color={palette.text} />
-            </XStack>
-
-            <XStack
-              width={44}
-              height={44}
-              alignItems="center"
-              justifyContent="center"
-              transition="quickest"
-              pressStyle={{ opacity: 0.55, scale: 0.9 }}
-              onPress={() => setQueueOpen(true)}>
-              <MaterialCommunityIcons name="playlist-music" size={22} color={palette.textSecondary} />
-            </XStack>
-          </XStack>
-        </YStack>
+            {controlsBlock}
+          </>
+        )}
       </YStack>
 
       <QueueSheet open={queueOpen} onOpenChange={setQueueOpen} />
