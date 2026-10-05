@@ -220,21 +220,27 @@ export default function PlayerScreen() {
   }
 
   useEffect(() => {
-    // 换歌时按小尺寸封面重新取主色，失败保持中性配色
+    // 换歌时按小尺寸封面重新取主色，失败保持中性配色。
+    // 解 JPEG 是纯 JS 重活：等页面切换动画结束后再跑，否则点开卡片的
+    // 那一下会和转场动画抢 JS 线程，背景/动画会明显掉帧。
     if (!trackHash) {
       return;
     }
     let alive = true;
-    const small = sizedImage(coverUrl, 240) ?? coverUrl;
-    if (small) {
+    const task = InteractionManager.runAfterInteractions(() => {
+      const small = sizedImage(coverUrl, 240) ?? coverUrl;
+      if (!small) {
+        return;
+      }
       extractAmbientColor(small).then((color) => {
         if (alive) {
           setAmbientByHash({ hash: trackHash, color });
         }
       });
-    }
+    });
     return () => {
       alive = false;
+      task.cancel();
     };
   }, [trackHash, coverUrl]);
 
