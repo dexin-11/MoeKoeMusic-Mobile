@@ -106,6 +106,15 @@ function AmbientBackground({
     return () => clearTimeout(timer);
   }, [layers]);
 
+  useEffect(() => {
+    // 提前预加载模糊底图：淡入开始时图片已在缓存里，不会中途才解码掉帧
+    const { coverUrl: url } = layers[layers.length - 1]!;
+    const small = sizedImage(url, 240) ?? url;
+    if (small) {
+      void Image.prefetch(small, { cachePolicy: 'disk' });
+    }
+  }, [layers]);
+
   return (
     <>
       {layers.map((layer, layerIndex) => (
@@ -119,11 +128,13 @@ function AmbientBackground({
           style={[StyleSheet.absoluteFill, { backgroundColor: baseColor }]}>
           {layer.coverUrl ? (
             <Image
-              source={{ uri: sizedImage(layer.coverUrl, 480) ?? layer.coverUrl }}
+              // 模糊到 50 半径后细节全无：用 240px 小图渲染成本降 4 倍，观感一致
+              source={{ uri: sizedImage(layer.coverUrl, 240) ?? layer.coverUrl }}
               style={StyleSheet.absoluteFill}
               blurRadius={50}
               contentFit="cover"
-              transition={0}
+              transition={120}
+              cachePolicy="disk"
             />
           ) : null}
           <LinearGradient
