@@ -4,6 +4,8 @@ const HUE_BINS = 36;
 
 /** 颜色缓存按 URL 记 Promise：同一封面只取一次，也避免并发重复请求。 */
 const cache = new Map<string, Promise<string | null>>();
+/** 已出结果的取色缓存：供进播放页时同步取初值，避免背景先灰一下再变色。 */
+const resolvedCache = new Map<string, string | null>();
 
 /**
  * 从封面图提取一个"鲜活"的主题色。纯 JS 解 JPEG，不依赖原生模块；
@@ -15,7 +17,19 @@ export function extractAmbientColor(url: string): Promise<string | null> {
     cached = extract(url).catch(() => null);
     cache.set(url, cached);
   }
+  void cached.then((color) => resolvedCache.set(url, color));
   return cached;
+}
+
+/**
+ * 同步查询已取到过的主色：命中返回颜色或 null（确定无色），
+ * 没取过返回 undefined。供初始化背景色用，避免已有缓存还先显示兜底色。
+ */
+export function peekAmbientColor(url: string | null | undefined): string | null | undefined {
+  if (!url) {
+    return undefined;
+  }
+  return resolvedCache.get(url);
 }
 
 async function extract(url: string): Promise<string | null> {

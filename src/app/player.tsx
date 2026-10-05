@@ -38,7 +38,7 @@ import {
 } from '@/features/settings/store';
 import { useIsTablet } from '@/hooks/use-is-tablet';
 import { useIsDark, usePalette } from '@/hooks/use-palette';
-import { extractAmbientColor, mixHex, withAlpha } from '@/lib/ambient-color';
+import { extractAmbientColor, mixHex, peekAmbientColor, withAlpha } from '@/lib/ambient-color';
 import { formatClock, sizedImage } from '@/lib/format';
 import { shareTrack } from '@/lib/share';
 
@@ -377,8 +377,12 @@ export default function PlayerScreen() {
   // 背景由封面主色驱动。新歌取色完成前沿用上一首的主色（而不是先跳到中性灰），
   // 这样取色完成后只发生一次背景渐变，不会"旧色→灰→新色"抖两次。
   // 取色完成但确实无色（灰白封面/非 JPEG）才落到中性灰。
+  // 初值同步查取色缓存：同一封面之前取过就直接用，进页不再"先灰一下再变色"。
   const neutralTint = isDark ? '#8A8FA3' : '#B9BECC';
-  const [tint, setTint] = useState(neutralTint);
+  const [tint, setTint] = useState(() => {
+    const cached = peekAmbientColor(sizedImage(coverUrl, 240) ?? coverUrl);
+    return cached === undefined ? neutralTint : cached || neutralTint;
+  });
   useEffect(() => {
     if (ambientByHash && ambientByHash.hash === trackHash) {
       setTint(ambientByHash.color ?? neutralTint);
