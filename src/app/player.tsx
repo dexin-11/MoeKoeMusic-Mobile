@@ -14,6 +14,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 import { Sheet, Slider, Spinner, Text, View, XStack, YStack } from 'tamagui';
 
 import { Artwork } from '@/components/ui/artwork';
@@ -52,6 +53,67 @@ const QUALITY_BADGE: Record<QualityId, string> = {
   '320': 'HQ',
   flac: 'SQ',
 };
+
+/** 主色遮罩的交叉淡入时长：慢一点才优雅，快了就和硬切没区别。 */
+const AMBIENT_FADE_MS = 1200;
+
+/**
+ * 按封面主色着色的背景遮罩。主色变化（首播取色完成/切歌）时不硬切，
+ * 而是新颜色一层盖在旧颜色上慢慢淡入，淡完再移除旧层。
+ */
+function AmbientScrim({ tint, isDark }: { tint: string; isDark: boolean }) {
+  const [layers, setLayers] = useState<{ tint: string; id: number }[]>([
+    { tint, id: 0 },
+  ]);
+
+  useEffect(() => {
+    setLayers((current) => {
+      if (current[current.length - 1]!.tint === tint) {
+        return current;
+      }
+      // 只保留紧邻的旧层，快速连续切歌也不会叠出一摞渐变
+      return [...current.slice(-1), { tint, id: current[current.length - 1]!.id + 1 }];
+    });
+  }, [tint]);
+
+  useEffect(() => {
+    if (layers.length < 2) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setLayers((current) => current.slice(-1));
+    }, AMBIENT_FADE_MS + 120);
+    return () => clearTimeout(timer);
+  }, [layers]);
+
+  return (
+    <>
+      {layers.map((layer, layerIndex) => (
+        <Animated.View
+          key={layer.id}
+          entering={
+            layerIndex === 0
+              ? undefined
+              : FadeIn.duration(AMBIENT_FADE_MS).easing(Easing.inOut(Easing.cubic))
+          }
+          style={StyleSheet.absoluteFill}>
+          <LinearGradient
+            colors={[
+              isDark
+                ? withAlpha(mixHex(layer.tint, '#000000', 0.45), 0.5)
+                : withAlpha('#FFFFFF', 0.55),
+              isDark
+                ? withAlpha(mixHex(layer.tint, '#0E0F16', 0.78), 0.94)
+                : withAlpha(mixHex(layer.tint, '#FFFFFF', 0.78), 0.92),
+            ]}
+            locations={[0, 0.55]}
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
+      ))}
+    </>
+  );
+}
 
 const QUALITY_OPTIONS: { value: QualityId; label: string; hint: string }[] = [
   { value: '128', label: '标准音质', hint: '流畅，适合在线播放' },
@@ -287,12 +349,6 @@ export default function PlayerScreen() {
 
   // 背景由封面主色驱动：取不到色（灰白封面/非 JPEG）时用中性灰兜底
   const tint = ambient ?? (isDark ? '#8A8FA3' : '#B9BECC');
-  const scrimTop = isDark
-    ? withAlpha(mixHex(tint, '#000000', 0.45), 0.5)
-    : withAlpha('#FFFFFF', 0.55);
-  const scrimBottom = isDark
-    ? withAlpha(mixHex(tint, '#0E0F16', 0.78), 0.94)
-    : withAlpha(mixHex(tint, '#FFFFFF', 0.78), 0.92);
 
   function handlePagerScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width);
@@ -583,11 +639,7 @@ export default function PlayerScreen() {
           transition={400}
         />
       ) : null}
-      <LinearGradient
-        colors={[scrimTop, scrimBottom]}
-        locations={[0, 0.55]}
-        style={StyleSheet.absoluteFill}
-      />
+      <AmbientScrim tint={tint} isDark={isDark} />
 
       <YStack flex={1} paddingTop={insets.top + 6} paddingBottom={Math.max(insets.bottom, 14) + 20}>
         {/* 顶栏：分栏时歌词常驻，设置与收起按钮一起靠右 */}
