@@ -98,6 +98,9 @@ const progressStore = createStore(INITIAL_PROGRESS_STATE);
 let audioPlayer: AudioPlayer | null = null;
 let loadSequence = 0;
 let failStreak = 0;
+/** 本次 loading 开始的时间；超过阈值仍 loading 视为取链挂死，播放键允许强制重试。 */
+let loadingSince = 0;
+const STALE_LOADING_MS = 12_000;
 /** 当前 player 里装载的音源地址；切音质时用它判断是否真的换了源。 */
 let currentSourceUri: string | null = null;
 /** 当前音源码率（bps）；非会员各档位可能都返回试听码率，用于跳过无效换源。 */
@@ -112,6 +115,9 @@ const LOCK_SCREEN_OPTIONS: AudioLockScreenOptions = {
   showSeekForward: true,
   showSeekBackward: true,
 };
+
+/** 原生侧音源加载/解码失败时给用户的统一文案（详情只进日志，不打扰用户）。 */
+const SOURCE_FAILED_MESSAGE = '播放源已失效，点此重试';
 
 function lockScreenMetadataFor(track: PlayerTrack): AudioMetadata {
   return {
@@ -152,6 +158,18 @@ function handlePlaybackStatus(status: AudioStatus) {
   const buffering = status.isBuffering && !status.playing;
   if (state.playing !== playing || state.buffering !== buffering) {
     playerStore.setState({ playing, buffering });
+  }
+
+  // 音源失效（URL 过期 / CDN 拒绝 / 解码失败）唯一的暴露渠道是 status.error。
+  // 漏掉它状态机会停在 playing=false + error=''：UI 显示暂停态，播放键只对死源反复 play()。
+  if (status.error && !state.loading && !state.error) {
+    if (__DEV__) {
+      console.warn('[player] source playback failed:', status.error);
+    }
+    playerStore.setState({ error: SOURCE_FAILED_MESSAGE });
+  } else if (!status.error && state.error === SOURCE_FAILED_MESSAGE) {
+    // expo-audio 在新源装载或恢复播放后会自动清除 error，提示同步撤回
+    playerStore.setState({ error: '' });
   }
 
   if (status.didJustFinish) {
@@ -202,6 +220,7 @@ async function loadTrackAt(index: number, options?: { autoplay?: boolean }) {
   }
 
   const sequence = ++loadSequence;
+  loadingSince = Date.now();
   playerStore.setState({
     index,
     track,
@@ -252,6 +271,7 @@ async function loadTrackAt(index: number, options?: { autoplay?: boolean }) {
     }
 
     failStreak = 0;
+    loadingSince = 0;
     playerStore.setState({ loading: false });
     if (source.durationMs > 0) {
       progressStore.setState({ durationMs: source.durationMs });
@@ -263,6 +283,7 @@ async function loadTrackAt(index: number, options?: { autoplay?: boolean }) {
     }
 
     failStreak += 1;
+    loadingSince = 0;
     playerStore.setState({
       loading: false,
       playing: false,
@@ -405,11 +426,17 @@ export const playerActions = {
 
   toggle() {
     const { track, playing, loading, error } = playerStore.getState();
-    if (!track || loading) {
+    if (!track) {
       return;
     }
 
-    if (error) {
+    if (loading && Date.now() - loadingSince < STALE_LOADING_MS) {
+      return;
+    }
+
+    // error 态（含音源失效）与挂死超时的 loading 都重新走取链：
+    // 对已经失效的 source 调用 play() 不会产生任何效果。
+    if (error || loading) {
       void loadTrackAt(playerStore.getState().index);
       return;
     }
@@ -447,9 +474,14 @@ export const playerActions = {
       return;
     }
 
+    const sequence = loadSequence;
+
     try {
       const source = await resolveSongSource(state.track, quality);
       if (
+        // 期间已切歌/清空队列：新曲目的加载流程自己管理 loading，这里不插手，
+        // 否则会把别的音源塞进 player 并把 loading 卡死。
+        sequence !== loadSequence ||
         !source.uri ||
         source.uri === currentSourceUri ||
         // 酷狗对非会员各档位都返回同一试听码率：内容没变就不要打断播放。
@@ -461,8 +493,8 @@ export const playerActions = {
       const player = ensureAudioPlayer();
       const { positionMs } = progressStore.getState();
       const wasPlaying = state.playing;
-      const sequence = loadSequence;
 
+      loadingSince = Date.now();
       playerStore.setState({ loading: true, error: '' });
       player.replace({ uri: source.uri });
       currentSourceUri = source.uri;
@@ -480,7 +512,11 @@ export const playerActions = {
         playerStore.setState({ loading: false });
       }
     } catch {
-      // 换源失败静默保留当前播放，用户可继续用原音质听。
+      // 换源失败静默保留当前播放，用户可继续用原音质听；但 loading 必须复位，
+      // 否则 toggle() 会被 loading 拦截挡住，播放键永久失效。
+      if (sequence === loadSequence) {
+        playerStore.setState({ loading: false });
+      }
     }
   },
 
