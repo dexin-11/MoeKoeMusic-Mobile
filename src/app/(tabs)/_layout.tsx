@@ -6,10 +6,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MiniPlayer } from '@/components/ui/mini-player';
 import {
-  SidebarWidth,
   TabBarHeight,
   TabBarSideMargin,
   TabletDockMaxWidth,
+  TabletTabBarMaxWidth,
 } from '@/constants/layout';
 import { useIsTablet } from '@/hooks/use-is-tablet';
 import { useIsDark, usePalette } from '@/hooks/use-palette';
@@ -42,15 +42,16 @@ export default function TabsLayout() {
     };
   }, []);
 
-  const barHeight = TabBarHeight + insets.bottom;
+  const barHeight = isTablet ? TabBarHeight : TabBarHeight + insets.bottom;
 
-  const dockWidth = isTablet
-    ? Math.min(width - SidebarWidth - TabBarSideMargin * 2, TabletDockMaxWidth)
-    : Math.min(width - TabBarSideMargin * 2, 680);
-  const dockLeft = isTablet
-    ? SidebarWidth + (width - SidebarWidth - dockWidth) / 2
-    : (width - dockWidth) / 2;
-  const dockBottom = isTablet ? insets.bottom + 12 : barHeight + 8;
+  // 平板：导航条是居中悬浮胶囊，MiniPlayer 悬浮在其上方；手机：沿用全宽底部栏
+  const tabBarWidth = isTablet ? Math.min(width - 48, TabletTabBarMaxWidth) : width;
+  const tabBarLeft = (width - tabBarWidth) / 2;
+  const tabBarBottom = isTablet ? insets.bottom + 10 : 0;
+
+  const dockWidth = Math.min(width - TabBarSideMargin * 2, isTablet ? TabletDockMaxWidth : 680);
+  const dockLeft = (width - dockWidth) / 2;
+  const dockBottom = tabBarBottom + barHeight + 8;
 
   return (
     <View style={styles.root}>
@@ -61,35 +62,30 @@ export default function TabsLayout() {
           tabBarShowLabel: true,
           tabBarActiveTintColor: palette.accent,
           tabBarInactiveTintColor: palette.textTertiary,
-          tabBarPosition: isTablet ? 'left' : 'bottom',
+          tabBarPosition: 'bottom',
           tabBarHideOnKeyboard: true,
           tabBarLabelStyle: {
             fontSize: 10.5,
             fontWeight: '600',
           },
-          tabBarStyle: isTablet
-            ? {
-                width: SidebarWidth,
-                backgroundColor: palette.barSurface,
-                borderTopWidth: 0,
-                borderRightWidth: StyleSheet.hairlineWidth,
-                borderRightColor: palette.border,
-              }
-            : {
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: barHeight,
-                borderTopWidth: StyleSheet.hairlineWidth,
-                borderTopColor: palette.border,
-                backgroundColor: palette.barSurface,
-                shadowColor: palette.dockShadow,
-                shadowOffset: { width: 0, height: 10 },
-                shadowOpacity: isDark ? 0.45 : 0.08,
-                shadowRadius: 22,
-                elevation: 10,
-              },
+          tabBarStyle: {
+            position: 'absolute',
+            left: tabBarLeft,
+            width: tabBarWidth,
+            bottom: tabBarBottom,
+            height: barHeight,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: palette.border,
+            backgroundColor: palette.barSurface,
+            borderRadius: isTablet ? 28 : 0,
+            borderColor: isTablet ? palette.border : undefined,
+            borderWidth: isTablet ? StyleSheet.hairlineWidth : 0,
+            shadowColor: palette.dockShadow,
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: isDark ? 0.45 : 0.08,
+            shadowRadius: 22,
+            elevation: isTablet ? 12 : 10,
+          },
         }}>
         {TAB_ROUTES.map((tab) => (
           <Tabs.Screen
